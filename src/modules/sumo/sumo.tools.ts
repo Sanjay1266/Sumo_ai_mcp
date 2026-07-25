@@ -35,22 +35,55 @@ function findSumoBinary(binaryName: string): string {
 }
 
 export class SumoTools {
+  private resolveLocationToBbox(locationOrBbox: string): string {
+    if (!locationOrBbox) return '76.890,10.895,76.915,10.915';
+    const query = locationOrBbox.trim();
+    const parts = query.split(',');
+    if (parts.length === 4) {
+      const floats = parts.map((p) => parseFloat(p));
+      if (!floats.some((f) => isNaN(f))) {
+        return floats.join(',');
+      }
+    }
+
+    const presets: Record<string, string> = {
+      ettimadai: '76.890,10.895,76.915,10.915',
+      amrita: '76.898,10.900,76.910,10.910',
+      erode: '77.700,11.330,77.780,11.410',
+      coimbatore: '76.940,11.000,76.980,11.030',
+      chennai: '80.250,13.060,80.290,13.100',
+      bangalore: '77.580,12.960,77.620,13.000',
+      bengaluru: '77.580,12.960,77.620,13.000',
+      delhi: '77.200,28.600,77.240,28.640'
+    };
+
+    const key = query.toLowerCase();
+    for (const [name, bbox] of Object.entries(presets)) {
+      if (key.includes(name)) {
+        return bbox;
+      }
+    }
+
+    return query;
+  }
+
   @Tool({
     name: 'generate_network',
-    description: 'Step 1: Download OSM map data for a bounding box and convert it into a SUMO network file (mymap.net.xml).',
+    description: 'Step 1: Download OSM map data automatically using a location name (e.g. "Erode City Center", "Ettimadai") or bounding box coordinates and convert it into a SUMO network file (mymap.net.xml).',
     inputSchema: z.object({
-      bbox: z.string().describe('Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat), e.g. "13.37,52.51,13.38,52.52"')
+      bbox: z.string().describe('Location name (e.g. "Erode City Center", "Ettimadai", "Amrita University") or coordinate string (min_lon,min_lat,max_lon,max_lat)')
     })
   })
   async generateNetwork(input: { bbox: string }, ctx: ExecutionContext) {
-    ctx.logger.info(`Generating SUMO network for bbox: ${input.bbox}`);
+    const targetBbox = this.resolveLocationToBbox(input.bbox);
+    ctx.logger.info(`Generating SUMO network for location '${input.bbox}' (resolved bbox: ${targetBbox})`);
 
     const osmScript = findSumoScript('osmGet.py');
     const netconvertBin = findSumoBinary('netconvert');
 
     try {
       // Step 1: Execute python osmGet.py -b [coords] -p mymap
-      execSync(`python "${osmScript}" -b ${input.bbox} -p mymap`, { stdio: ['ignore', 'pipe', 'pipe'] });
+      execSync(`python "${osmScript}" -b ${targetBbox} -p mymap`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       // Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
       const files = fs.readdirSync(process.cwd());
@@ -62,7 +95,7 @@ export class SumoTools {
 
       return {
         status: 'success',
-        message: "Success: Network file 'mymap.net.xml' is ready."
+        message: `Success: Network file 'mymap.net.xml' is ready for location '${input.bbox}' (${targetBbox}).`
       };
     } catch (e: any) {
       return {

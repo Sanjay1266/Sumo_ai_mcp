@@ -105,6 +105,19 @@ export class SumoTools {
     }
   }
 
+  private createVTypesFile(filePath = 'vtypes.add.xml') {
+    const vtypesXml = `<additional>
+    <vTypeDistribution id="indian_mixed">
+        <vType id="ind_motorcycle" vClass="motorcycle" length="1.8" width="0.8" minGap="0.5" maxSpeed="16.67" accel="3.5" decel="5.0" probability="0.35" color="1,0.3,0.3" latAlignment="arbitrary"/>
+        <vType id="ind_autorickshaw" vClass="moped" length="2.6" width="1.3" minGap="0.8" maxSpeed="13.89" accel="2.0" decel="4.5" probability="0.20" color="1,0.8,0" latAlignment="arbitrary"/>
+        <vType id="ind_car" vClass="passenger" length="4.3" width="1.8" minGap="1.0" maxSpeed="22.22" accel="2.6" decel="4.5" probability="0.30" color="0.2,0.6,1"/>
+        <vType id="ind_bus" vClass="bus" length="10.5" width="2.5" minGap="2.0" maxSpeed="13.89" accel="1.2" decel="3.5" probability="0.08" color="0.2,0.8,0.2"/>
+        <vType id="ind_truck" vClass="truck" length="8.0" width="2.4" minGap="2.0" maxSpeed="13.89" accel="1.0" decel="3.0" probability="0.07" color="0.8,0.5,0.2"/>
+    </vTypeDistribution>
+</additional>`;
+    fs.writeFileSync(path.join(process.cwd(), filePath), vtypesXml, 'utf-8');
+  }
+
   private createGuiSettings(netFile = 'mymap.net.xml', settingsFile = 'gui-settings.xml') {
     let centerX = 1000.0;
     let centerY = 1000.0;
@@ -134,7 +147,7 @@ export class SumoTools {
     <scheme name="real world"/>
     <delay value="150"/>
     <viewport zoom="${zoom.toFixed(2)}" x="${centerX.toFixed(2)}" y="${centerY.toFixed(2)}"/>
-    <vehicles vehicleScale="3.5"/>
+    <vehicles vehicleScale="2.5" vehicleColorer="by vType"/>
 </viewsettings>`;
 
     fs.writeFileSync(path.join(process.cwd(), settingsFile), guiXml, 'utf-8');
@@ -142,18 +155,24 @@ export class SumoTools {
 
   @Tool({
     name: 'generate_routes',
-    description: 'Step 2: Generate random trips/routes for the network and create the mymap.sumocfg XML configuration file.',
+    description: 'Step 2: Generate random trips/routes for heterogeneous Indian traffic (motorcycles, autos, cars, buses, trucks) and sublane configuration file.',
     inputSchema: z.object({
-      trips: z.number().optional().default(200).describe('Total number of trips to generate across simulation duration'),
-      duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)')
+      trips: z.number().optional().default(600).describe('Total number of trips to generate across simulation duration (default: 600)'),
+      duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)'),
+      density: z.enum(['low', 'medium', 'high', 'congested']).optional().describe('Preset traffic density level (low: 250, medium: 600, high: 1200, congested: 2000 trips)')
     })
   })
-  async generateRoutes(input: { trips?: number; duration?: number }, ctx: ExecutionContext) {
-    const totalTrips = input.trips || 200;
+  async generateRoutes(input: { trips?: number; duration?: number; density?: 'low' | 'medium' | 'high' | 'congested' }, ctx: ExecutionContext) {
+    let totalTrips = input.trips || 600;
+    if (input.density) {
+      const densityMap: Record<string, number> = { low: 250, medium: 600, high: 1200, congested: 2000 };
+      totalTrips = densityMap[input.density] || totalTrips;
+    }
+
     const totalDuration = input.duration || 7200;
     const period = Math.max(1, Math.floor(totalDuration / totalTrips));
 
-    ctx.logger.info(`Generating SUMO routes for ${totalTrips} trips over ${totalDuration}s (period=${period})`);
+    ctx.logger.info(`Generating heterogeneous SUMO routes for ${totalTrips} trips over ${totalDuration}s (period=${period})`);
 
     const tripsScript = findSumoScript('randomTrips.py');
 
@@ -165,19 +184,25 @@ export class SumoTools {
     }
 
     try {
-      // Step 1: Execute python randomTrips.py -n mymap.net.xml -e [duration] -p [period] -l -r mymap.rou.xml
-      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml`, { stdio: ['ignore', 'pipe', 'pipe'] });
+      // Step 1: Create heterogeneous Indian vehicle types file (motorcycles, autorickshaws, cars, buses, trucks)
+      this.createVTypesFile('vtypes.add.xml');
 
-      // Step 2: Auto-generate GUI visual settings file
+      // Step 2: Execute python randomTrips.py with indian_mixed vType distribution
+      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml -a vtypes.add.xml --trip-attributes "type=\\"indian_mixed\\""`, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+      // Step 3: Auto-generate GUI visual settings file
       this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');
 
-      // Step 3: Programmatically generate mymap.sumocfg XML file referencing net, routes, and gui-settings
+      // Step 4: Programmatically generate mymap.sumocfg XML file referencing net, routes, and sublane processing
       const sumocfgContent = `<configuration>
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
         <gui-settings-file value="gui-settings.xml"/>
     </input>
+    <processing>
+        <lateral-resolution value="0.8"/>
+    </processing>
     <time>
         <begin value="0"/>
         <end value="${totalDuration}"/>
@@ -188,7 +213,7 @@ export class SumoTools {
 
       return {
         status: 'success',
-        message: "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
+        message: `Success: SUMO configuration file 'mymap.sumocfg' generated with ${totalTrips} trips across heterogeneous vehicle types (motorcycles, autos, cars, buses, trucks) and sublane resolution.`
       };
     } catch (e: any) {
       return {
@@ -315,13 +340,14 @@ export class SumoTools {
     description: 'Master Orchestration Tool: Executes the complete end-to-end SUMO traffic simulation pipeline in a single call (downloads network, generates routes, opens GUI, and analyzes results).',
     inputSchema: z.object({
       bbox: z.string().describe('Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)'),
-      trips: z.number().optional().default(250).describe('Total number of vehicle trips to simulate'),
+      trips: z.number().optional().default(600).describe('Total number of vehicle trips to simulate (default: 600)'),
       duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)'),
+      density: z.enum(['low', 'medium', 'high', 'congested']).optional().describe('Preset traffic density level (low: 250, medium: 600, high: 1200, congested: 2000 trips)'),
       launchGui: z.boolean().optional().default(true).describe('Automatically open the visual SUMO GUI desktop application')
     })
   })
   async runFullSimulation(
-    input: { bbox: string; trips?: number; duration?: number; launchGui?: boolean },
+    input: { bbox: string; trips?: number; duration?: number; density?: 'low' | 'medium' | 'high' | 'congested'; launchGui?: boolean },
     ctx: ExecutionContext
   ) {
     ctx.logger.info(`Running full end-to-end simulation for bbox: ${input.bbox}`);
@@ -331,7 +357,8 @@ export class SumoTools {
       return { status: 'error', step: 'generate_network', message: netRes.message };
     }
 
-    const routesRes = await this.generateRoutes({ trips: input.trips || 250, duration: input.duration || 7200 }, ctx);
+    const targetTrips = input.trips || 600;
+    const routesRes = await this.generateRoutes({ trips: targetTrips, duration: input.duration || 7200, density: input.density }, ctx);
     if (routesRes.status === 'error') {
       return { status: 'error', step: 'generate_routes', message: routesRes.message };
     }
@@ -348,8 +375,9 @@ export class SumoTools {
     return {
       status: 'success',
       bbox: input.bbox,
-      trips: input.trips || 250,
+      trips: targetTrips,
       duration: input.duration || 7200,
+      density: input.density || 'medium',
       gui_launched: input.launchGui !== false,
       network_status: netRes.message,
       routes_status: routesRes.message,

@@ -136,6 +136,21 @@ def generate_network(bbox: str) -> str:
         return f"Error generating network: {str(e)}"
 
 
+def create_vtypes_file(file_path: str = "vtypes.add.xml") -> None:
+    """Helper to auto-generate SUMO additional file with heterogeneous Indian vehicle types distribution."""
+    vtypes_xml = """<additional>
+    <vTypeDistribution id="indian_mixed">
+        <vType id="ind_motorcycle" vClass="motorcycle" length="1.8" width="0.8" minGap="0.5" maxSpeed="16.67" accel="3.5" decel="5.0" probability="0.35" color="1,0.3,0.3" latAlignment="arbitrary"/>
+        <vType id="ind_autorickshaw" vClass="moped" length="2.6" width="1.3" minGap="0.8" maxSpeed="13.89" accel="2.0" decel="4.5" probability="0.20" color="1,0.8,0" latAlignment="arbitrary"/>
+        <vType id="ind_car" vClass="passenger" length="4.3" width="1.8" minGap="1.0" maxSpeed="22.22" accel="2.6" decel="4.5" probability="0.30" color="0.2,0.6,1"/>
+        <vType id="ind_bus" vClass="bus" length="10.5" width="2.5" minGap="2.0" maxSpeed="13.89" accel="1.2" decel="3.5" probability="0.08" color="0.2,0.8,0.2"/>
+        <vType id="ind_truck" vClass="truck" length="8.0" width="2.4" minGap="2.0" maxSpeed="13.89" accel="1.0" decel="3.0" probability="0.07" color="0.8,0.5,0.2"/>
+    </vTypeDistribution>
+</additional>"""
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(vtypes_xml)
+
+
 def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str = "gui-settings.xml") -> None:
     """Helper to auto-generate SUMO GUI settings XML for optimal human visual playback."""
     center_x, center_y, zoom = 1000.0, 1000.0, 500.0
@@ -158,7 +173,7 @@ def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str 
     <scheme name="real world"/>
     <delay value="150"/>
     <viewport zoom="{zoom:.2f}" x="{center_x:.2f}" y="{center_y:.2f}"/>
-    <vehicles vehicleScale="3.5"/>
+    <vehicles vehicleScale="2.5" vehicleColorer="by vType"/>
 </viewsettings>"""
 
     with open(gui_settings_file, "w", encoding="utf-8") as f:
@@ -166,42 +181,57 @@ def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str 
 
 
 @mcp.tool()
-def generate_routes(trips: int = 200, duration: int = 7200) -> str:
+def generate_routes(trips: int = 600, duration: int = 7200, density: str = None) -> str:
     """
     Step 2: Route Generation Tool
-    Generates random trip routes for the SUMO network and programmatically creates the sumocfg file.
+    Generates random trip routes for heterogeneous Indian traffic (motorcycles, autos, cars, buses, trucks) and sublane configuration file.
 
-    :param trips: Total number of vehicles/trips to generate across the simulation duration
+    :param trips: Total number of vehicles/trips to generate across the simulation duration (default: 600)
     :param duration: Total simulation duration in seconds (default: 7200 seconds / 2 hours)
+    :param density: Optional preset density level ('low': 250, 'medium': 600, 'high': 1200, 'congested': 2000)
     :return: Confirmation message when mymap.sumocfg is created.
     """
     trips_script = find_sumo_script("randomTrips.py")
-    period = max(1, duration // max(1, trips))
+    
+    total_trips = trips
+    if density:
+        density_map = {"low": 250, "medium": 600, "high": 1200, "congested": 2000}
+        total_trips = density_map.get(density.lower(), trips)
+
+    period = max(1, duration // max(1, total_trips))
 
     if not os.path.exists("mymap.net.xml"):
         return "Error: 'mymap.net.xml' not found. Please run 'generate_network' first."
 
     try:
-        # Execute randomTrips.py to generate random routes on the network over specified duration
+        # Step 1: Create heterogeneous Indian vehicle types file
+        create_vtypes_file("vtypes.add.xml")
+
+        # Step 2: Execute randomTrips.py to generate random routes on the network over specified duration with indian_mixed distribution
         subprocess.run([
             sys.executable, trips_script,
             "-n", "mymap.net.xml",
             "-e", str(duration),
             "-p", str(period),
             "-l",
-            "-r", "mymap.rou.xml"
+            "-r", "mymap.rou.xml",
+            "-a", "vtypes.add.xml",
+            "--trip-attributes", 'type="indian_mixed"'
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
-        # Generate GUI visual enhancement settings file
+        # Step 3: Generate GUI visual enhancement settings file
         create_gui_settings("mymap.net.xml", "gui-settings.xml")
 
-        # Programmatically create mymap.sumocfg XML file referencing network, route, and gui-settings files
+        # Step 4: Programmatically create mymap.sumocfg XML file referencing network, route, and sublane settings
         sumocfg_content = f"""<configuration>
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
         <gui-settings-file value="gui-settings.xml"/>
     </input>
+    <processing>
+        <lateral-resolution value="0.8"/>
+    </processing>
     <time>
         <begin value="0"/>
         <end value="{duration}"/>
@@ -211,7 +241,7 @@ def generate_routes(trips: int = 200, duration: int = 7200) -> str:
         with open("mymap.sumocfg", "w", encoding="utf-8") as f:
             f.write(sumocfg_content)
 
-        return "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
+        return f"Success: SUMO configuration file 'mymap.sumocfg' generated with {total_trips} trips across heterogeneous vehicle types (motorcycles, autos, cars, buses, trucks) and sublane resolution."
     except subprocess.CalledProcessError as e:
         return f"Error generating routes: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
@@ -321,20 +351,21 @@ def analyze_results() -> dict:
 
 
 @mcp.tool()
-def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launch_gui: bool = True) -> dict:
+def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, density: str = None, launch_gui: bool = True) -> dict:
     """
     Master Orchestration Tool
     Executes the COMPLETE SUMO simulation pipeline end-to-end in a SINGLE call without multi-turn prompting:
     1. Downloads OSM map data for bbox & generates network (.net.xml)
-    2. Generates vehicle routes (.rou.xml & sumocfg)
-    3. Auto-configures centered 3.5x visual GUI settings (gui-settings.xml)
+    2. Generates vehicle routes (.rou.xml, vtypes.add.xml & sumocfg)
+    3. Auto-configures centered visual GUI settings (gui-settings.xml)
     4. Executes headless simulation & produces statistics XML
     5. Automatically opens SUMO GUI desktop app for live visual playback
     6. Parses and returns final traffic analytics metrics
 
     :param bbox: Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)
-    :param trips: Total number of vehicle trips to generate
+    :param trips: Total number of vehicle trips to generate (default: 600)
     :param duration: Total simulation duration in seconds (default: 7200s / 2 hours)
+    :param density: Optional preset density level ('low': 250, 'medium': 600, 'high': 1200, 'congested': 2000)
     :param launch_gui: Automatically open the visual SUMO GUI app on desktop (default: True)
     :return: Combined result dictionary containing status messages and final analytics.
     """
@@ -343,8 +374,8 @@ def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launc
     if net_res.startswith("Error"):
         return {"status": "error", "step": "generate_network", "message": net_res}
 
-    # Step 2: Generate routes & gui settings
-    routes_res = generate_routes(trips=trips, duration=duration)
+    # Step 2: Generate routes & gui settings with heterogeneous vehicle distribution
+    routes_res = generate_routes(trips=trips, duration=duration, density=density)
     if routes_res.startswith("Error"):
         return {"status": "error", "step": "generate_routes", "message": routes_res}
 
@@ -364,6 +395,7 @@ def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launc
         "bbox": bbox,
         "trips": trips,
         "duration": duration,
+        "density": density or "medium",
         "gui_launched": launch_gui,
         "network_status": net_res,
         "routes_status": routes_res,

@@ -50,7 +50,7 @@ export class SumoTools {
 
     try {
       // Step 1: Execute python osmGet.py -b [coords] -p mymap
-      execSync(`python "${osmScript}" -b ${input.bbox} -p mymap`, { stdio: 'inherit' });
+      execSync(`python "${osmScript}" -b ${input.bbox} -p mymap`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       // Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
       const files = fs.readdirSync(process.cwd());
@@ -58,7 +58,7 @@ export class SumoTools {
       const osmInput = osmFiles.length > 0 ? osmFiles.join(',') : 'mymap.osm';
 
       // Step 2: Execute netconvert --osm-files mymap.osm -o mymap.net.xml
-      execSync(`"${netconvertBin}" --osm-files ${osmInput} -o mymap.net.xml`, { stdio: 'inherit' });
+      execSync(`"${netconvertBin}" --osm-files ${osmInput} -o mymap.net.xml`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       return {
         status: 'success',
@@ -133,7 +133,7 @@ export class SumoTools {
 
     try {
       // Step 1: Execute python randomTrips.py -n mymap.net.xml -e [duration] -p [period] -l -r mymap.rou.xml
-      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml`, { stdio: 'inherit' });
+      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       // Step 2: Auto-generate GUI visual settings file
       this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');
@@ -184,7 +184,7 @@ export class SumoTools {
 
     try {
       // Execute SUMO headlessly and wait for completion
-      execSync(`"${sumoBin}" -c mymap.sumocfg --statistic-output stats.xml --tripinfo-output tripinfo.xml`, { stdio: 'inherit' });
+      execSync(`"${sumoBin}" -c mymap.sumocfg --statistic-output stats.xml --tripinfo-output tripinfo.xml`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       return {
         status: 'success',

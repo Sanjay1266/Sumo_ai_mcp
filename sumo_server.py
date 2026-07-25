@@ -62,18 +62,18 @@ def generate_network(bbox: str) -> str:
 
     try:
         # Execute osmGet.py to download map data for given bounding box and prefix 'mymap'
-        subprocess.run([sys.executable, osm_script, "-b", bbox, "-p", "mymap"], check=True)
+        subprocess.run([sys.executable, osm_script, "-b", bbox, "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
         # Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
         osm_files = [f for f in os.listdir(".") if f.startswith("mymap") and (f.endswith(".osm") or f.endswith(".osm.xml"))]
         osm_input = ",".join(osm_files) if osm_files else "mymap.osm"
 
         # Execute netconvert to convert downloaded OpenStreetMap file into SUMO XML network format
-        subprocess.run([netconvert_bin, "--osm-files", osm_input, "-o", "mymap.net.xml"], check=True)
+        subprocess.run([netconvert_bin, "--osm-files", osm_input, "-o", "mymap.net.xml"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
         return "Success: Network file 'mymap.net.xml' is ready."
     except subprocess.CalledProcessError as e:
-        return f"Error generating network: Subprocess exited with code {e.returncode}"
+        return f"Error generating network: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
         return f"Error generating network: {str(e)}"
 
@@ -132,7 +132,7 @@ def generate_routes(trips: int = 200, duration: int = 7200) -> str:
             "-p", str(period),
             "-l",
             "-r", "mymap.rou.xml"
-        ], check=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
         # Generate GUI visual enhancement settings file
         create_gui_settings("mymap.net.xml", "gui-settings.xml")
@@ -155,7 +155,7 @@ def generate_routes(trips: int = 200, duration: int = 7200) -> str:
 
         return "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
     except subprocess.CalledProcessError as e:
-        return f"Error generating routes: Subprocess exited with code {e.returncode}"
+        return f"Error generating routes: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
         return f"Error generating routes: {str(e)}"
 
@@ -180,11 +180,11 @@ def run_headless_simulation() -> str:
             "-c", "mymap.sumocfg",
             "--statistic-output", "stats.xml",
             "--tripinfo-output", "tripinfo.xml"
-        ], check=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
         return "Success: Headless SUMO simulation completed. 'stats.xml' and 'tripinfo.xml' generated."
     except subprocess.CalledProcessError as e:
-        return f"Error running simulation: Subprocess exited with code {e.returncode}"
+        return f"Error running simulation: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
         return f"Error running simulation: {str(e)}"
 

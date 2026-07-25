@@ -276,4 +276,53 @@ export class SumoTools {
       };
     }
   }
+
+  @Tool({
+    name: 'run_full_simulation',
+    description: 'Master Orchestration Tool: Executes the complete end-to-end SUMO traffic simulation pipeline in a single call (downloads network, generates routes, opens GUI, and analyzes results).',
+    inputSchema: z.object({
+      bbox: z.string().describe('Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)'),
+      trips: z.number().optional().default(250).describe('Total number of vehicle trips to simulate'),
+      duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)'),
+      launchGui: z.boolean().optional().default(true).describe('Automatically open the visual SUMO GUI desktop application')
+    })
+  })
+  async runFullSimulation(
+    input: { bbox: string; trips?: number; duration?: number; launchGui?: boolean },
+    ctx: ExecutionContext
+  ) {
+    ctx.logger.info(`Running full end-to-end simulation for bbox: ${input.bbox}`);
+
+    const netRes = await this.generateNetwork({ bbox: input.bbox }, ctx);
+    if (netRes.status === 'error') {
+      return { status: 'error', step: 'generate_network', message: netRes.message };
+    }
+
+    const routesRes = await this.generateRoutes({ trips: input.trips || 250, duration: input.duration || 7200 }, ctx);
+    if (routesRes.status === 'error') {
+      return { status: 'error', step: 'generate_routes', message: routesRes.message };
+    }
+
+    const headlessRes = await this.runHeadlessSimulation({}, ctx);
+
+    let guiRes: any = null;
+    if (input.launchGui !== false) {
+      guiRes = await this.runGuiSimulation({ autoStart: true, delay: 150 }, ctx);
+    }
+
+    const analytics = await this.analyzeResults({}, ctx);
+
+    return {
+      status: 'success',
+      bbox: input.bbox,
+      trips: input.trips || 250,
+      duration: input.duration || 7200,
+      gui_launched: input.launchGui !== false,
+      network_status: netRes.message,
+      routes_status: routesRes.message,
+      headless_status: headlessRes.message,
+      gui_status: guiRes ? guiRes.message : 'GUI not requested',
+      analytics
+    };
+  }
 }

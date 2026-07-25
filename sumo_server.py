@@ -262,5 +262,58 @@ def analyze_results() -> dict:
         }
 
 
+@mcp.tool()
+def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launch_gui: bool = True) -> dict:
+    """
+    Master Orchestration Tool
+    Executes the COMPLETE SUMO simulation pipeline end-to-end in a SINGLE call without multi-turn prompting:
+    1. Downloads OSM map data for bbox & generates network (.net.xml)
+    2. Generates vehicle routes (.rou.xml & sumocfg)
+    3. Auto-configures centered 3.5x visual GUI settings (gui-settings.xml)
+    4. Executes headless simulation & produces statistics XML
+    5. Automatically opens SUMO GUI desktop app for live visual playback
+    6. Parses and returns final traffic analytics metrics
+
+    :param bbox: Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)
+    :param trips: Total number of vehicle trips to generate
+    :param duration: Total simulation duration in seconds (default: 7200s / 2 hours)
+    :param launch_gui: Automatically open the visual SUMO GUI app on desktop (default: True)
+    :return: Combined result dictionary containing status messages and final analytics.
+    """
+    # Step 1: Generate network
+    net_res = generate_network(bbox)
+    if net_res.startswith("Error"):
+        return {"status": "error", "step": "generate_network", "message": net_res}
+
+    # Step 2: Generate routes & gui settings
+    routes_res = generate_routes(trips=trips, duration=duration)
+    if routes_res.startswith("Error"):
+        return {"status": "error", "step": "generate_routes", "message": routes_res}
+
+    # Step 3: Run headless simulation for stats XML
+    headless_res = run_headless_simulation()
+
+    # Step 4: Launch GUI if requested
+    gui_res = None
+    if launch_gui:
+        gui_res = run_gui_simulation(auto_start=True, delay=150)
+
+    # Step 5: Analyze results
+    analytics = analyze_results()
+
+    return {
+        "status": "success",
+        "bbox": bbox,
+        "trips": trips,
+        "duration": duration,
+        "gui_launched": launch_gui,
+        "network_status": net_res,
+        "routes_status": routes_res,
+        "headless_status": headless_res,
+        "gui_status": gui_res,
+        "analytics": analytics
+    }
+
+
 if __name__ == "__main__":
     mcp.run()

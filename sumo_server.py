@@ -48,21 +48,79 @@ def find_sumo_binary(binary_name: str) -> str:
     return binary_name
 
 
+import urllib.request
+import urllib.parse
+
+
+def resolve_location_to_bbox(location_or_bbox: str) -> str:
+    """
+    Automatically converts place names (e.g. 'Erode City Center', 'Ettimadai', 'Amrita University', 'Coimbatore') 
+    or numerical bbox strings ('min_lon,min_lat,max_lon,max_lat') into SUMO bbox format automatically.
+    """
+    if not location_or_bbox:
+        return "76.890,10.895,76.915,10.915"
+
+    query_str = location_or_bbox.strip()
+
+    # Check if already a 4-comma numerical string
+    parts = query_str.split(',')
+    if len(parts) == 4:
+        try:
+            floats = [float(p) for p in parts]
+            return f"{floats[0]},{floats[1]},{floats[2]},{floats[3]}"
+        except ValueError:
+            pass
+
+    # High-precision offline presets for instant resolution
+    presets = {
+        "ettimadai": "76.890,10.895,76.915,10.915",
+        "amrita": "76.898,10.900,76.910,10.910",
+        "erode": "77.700,11.330,77.780,11.410",
+        "coimbatore": "76.940,11.000,76.980,11.030",
+        "chennai": "80.250,13.060,80.290,13.100",
+        "bangalore": "77.580,12.960,77.620,13.000",
+        "bengaluru": "77.580,12.960,77.620,13.000",
+        "delhi": "77.200,28.600,77.240,28.640"
+    }
+
+    key = query_str.lower()
+    for preset_name, preset_bbox in presets.items():
+        if preset_name in key:
+            return preset_bbox
+
+    # Dynamic OpenStreetMap Nominatim Geocoding lookup
+    try:
+        url = "https://nominatim.openstreetmap.org/search?q=" + urllib.parse.quote(query_str) + "&format=json"
+        req = urllib.request.Request(url, headers={'User-Agent': 'SUMO-MCP-AutoGeocoder/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            if data and len(data) > 0:
+                boundingbox = data[0].get('boundingbox')  # [southLat, northLat, westLon, eastLon]
+                if boundingbox and len(boundingbox) == 4:
+                    min_lat, max_lat, min_lon, max_lon = [float(x) for x in boundingbox]
+                    return f"{min_lon:.4f},{min_lat:.4f},{max_lon:.4f},{max_lat:.4f}"
+    except Exception:
+        pass
+
+    return query_str
+
+
 @mcp.tool()
 def generate_network(bbox: str) -> str:
     """
     Step 1: Network Generation Tool
-    Downloads OpenStreetMap data using a bounding box and converts it into a SUMO network file (.net.xml).
+    Downloads OpenStreetMap data automatically using a location name (e.g. 'Erode City Center', 'Ettimadai') or bounding box and converts it into a SUMO network file (.net.xml).
 
-    :param bbox: Bounding box coordinate string, e.g. '13.37,52.51,13.38,52.52' (min_lon,min_lat,max_lon,max_lat)
+    :param bbox: Location name (e.g. 'Erode City Center', 'Ettimadai') or bounding box string ('min_lon,min_lat,max_lon,max_lat')
     :return: Confirmation message when mymap.net.xml is created.
     """
+    target_bbox = resolve_location_to_bbox(bbox)
     osm_script = find_sumo_script("osmGet.py")
     netconvert_bin = find_sumo_binary("netconvert")
 
     try:
         # Execute osmGet.py to download map data for given bounding box and prefix 'mymap'
-        subprocess.run([sys.executable, osm_script, "-b", bbox, "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        subprocess.run([sys.executable, osm_script, "-b", target_bbox, "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
         # Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
         osm_files = [f for f in os.listdir(".") if f.startswith("mymap") and (f.endswith(".osm") or f.endswith(".osm.xml"))]
@@ -71,7 +129,7 @@ def generate_network(bbox: str) -> str:
         # Execute netconvert to convert downloaded OpenStreetMap file into SUMO XML network format
         subprocess.run([netconvert_bin, "--osm-files", osm_input, "-o", "mymap.net.xml"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
-        return "Success: Network file 'mymap.net.xml' is ready."
+        return f"Success: Network file 'mymap.net.xml' is ready for bbox ({target_bbox})."
     except subprocess.CalledProcessError as e:
         return f"Error generating network: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:

@@ -72,6 +72,41 @@ export class SumoTools {
     }
   }
 
+  private createGuiSettings(netFile = 'mymap.net.xml', settingsFile = 'gui-settings.xml') {
+    let centerX = 1000.0;
+    let centerY = 1000.0;
+    let zoom = 500.0;
+
+    if (fs.existsSync(netFile)) {
+      try {
+        const netContent = fs.readFileSync(netFile, 'utf-8');
+        const match = netContent.match(/convBoundary="([^"]+)"/);
+        if (match && match[1]) {
+          const parts = match[1].split(',').map((v) => parseFloat(v));
+          if (parts.length === 4) {
+            const [minX, minY, maxX, maxY] = parts;
+            centerX = (minX + maxX) / 2.0;
+            centerY = (minY + maxY) / 2.0;
+            const width = Math.max(1.0, maxX - minX);
+            const height = Math.max(1.0, maxY - minY);
+            zoom = Math.max(400.0, Math.min(2500.0, 120000.0 / Math.max(width, height)));
+          }
+        }
+      } catch (e) {
+        // Fallback to default center/zoom
+      }
+    }
+
+    const guiXml = `<viewsettings>
+    <scheme name="real world"/>
+    <delay value="150"/>
+    <viewport zoom="${zoom.toFixed(2)}" x="${centerX.toFixed(2)}" y="${centerY.toFixed(2)}"/>
+    <vehicles vehicleScale="3.5"/>
+</viewsettings>`;
+
+    fs.writeFileSync(path.join(process.cwd(), settingsFile), guiXml, 'utf-8');
+  }
+
   @Tool({
     name: 'generate_routes',
     description: 'Step 2: Generate random trips/routes for the network and create the mymap.sumocfg XML configuration file.',
@@ -100,11 +135,15 @@ export class SumoTools {
       // Step 1: Execute python randomTrips.py -n mymap.net.xml -e [duration] -p [period] -l -r mymap.rou.xml
       execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml`, { stdio: 'inherit' });
 
-      // Step 2: Programmatically generate mymap.sumocfg XML file
+      // Step 2: Auto-generate GUI visual settings file
+      this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');
+
+      // Step 3: Programmatically generate mymap.sumocfg XML file referencing net, routes, and gui-settings
       const sumocfgContent = `<configuration>
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
+        <gui-settings-file value="gui-settings.xml"/>
     </input>
     <time>
         <begin value="0"/>
@@ -116,7 +155,7 @@ export class SumoTools {
 
       return {
         status: 'success',
-        message: "Success: SUMO configuration file 'mymap.sumocfg' is ready."
+        message: "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
       };
     } catch (e: any) {
       return {
@@ -179,13 +218,17 @@ export class SumoTools {
       };
     }
 
+    if (!fs.existsSync('gui-settings.xml')) {
+      this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');
+    }
+
     try {
       const autoStartFlag = input.autoStart !== false ? '--start' : '';
-      execSync(`start "" "${sumoGuiBin}" -c mymap.sumocfg --delay ${stepDelay} ${autoStartFlag}`);
+      execSync(`start "" "${sumoGuiBin}" -c mymap.sumocfg -g gui-settings.xml --delay ${stepDelay} ${autoStartFlag}`);
 
       return {
         status: 'success',
-        message: `Success: SUMO GUI application launched on desktop with ${stepDelay}ms step delay.`
+        message: `Success: SUMO GUI application launched on desktop with centered viewport, enlarged vehicles (3.5x), real world scheme, and ${stepDelay}ms step delay.`
       };
     } catch (e: any) {
       return {

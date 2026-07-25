@@ -78,6 +78,35 @@ def generate_network(bbox: str) -> str:
         return f"Error generating network: {str(e)}"
 
 
+def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str = "gui-settings.xml") -> None:
+    """Helper to auto-generate SUMO GUI settings XML for optimal human visual playback."""
+    center_x, center_y, zoom = 1000.0, 1000.0, 500.0
+    if os.path.exists(net_file):
+        try:
+            tree = ET.parse(net_file)
+            location = tree.getroot().find('location')
+            if location is not None:
+                bounds = [float(x) for x in location.get('convBoundary', '0,0,2000,2000').split(',')]
+                minX, minY, maxX, maxY = bounds
+                center_x = (minX + maxX) / 2.0
+                center_y = (minY + maxY) / 2.0
+                width = max(1.0, maxX - minX)
+                height = max(1.0, maxY - minY)
+                zoom = max(400.0, min(2500.0, 120000.0 / max(width, height)))
+        except Exception:
+            pass
+
+    gui_xml = f"""<viewsettings>
+    <scheme name="real world"/>
+    <delay value="150"/>
+    <viewport zoom="{zoom:.2f}" x="{center_x:.2f}" y="{center_y:.2f}"/>
+    <vehicles vehicleScale="3.5"/>
+</viewsettings>"""
+
+    with open(gui_settings_file, "w", encoding="utf-8") as f:
+        f.write(gui_xml)
+
+
 @mcp.tool()
 def generate_routes(trips: int = 200, duration: int = 7200) -> str:
     """
@@ -105,11 +134,15 @@ def generate_routes(trips: int = 200, duration: int = 7200) -> str:
             "-r", "mymap.rou.xml"
         ], check=True)
 
-        # Programmatically create mymap.sumocfg XML file referencing network and route files
+        # Generate GUI visual enhancement settings file
+        create_gui_settings("mymap.net.xml", "gui-settings.xml")
+
+        # Programmatically create mymap.sumocfg XML file referencing network, route, and gui-settings files
         sumocfg_content = f"""<configuration>
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
+        <gui-settings-file value="gui-settings.xml"/>
     </input>
     <time>
         <begin value="0"/>
@@ -120,7 +153,7 @@ def generate_routes(trips: int = 200, duration: int = 7200) -> str:
         with open("mymap.sumocfg", "w", encoding="utf-8") as f:
             f.write(sumocfg_content)
 
-        return "Success: SUMO configuration file 'mymap.sumocfg' is ready."
+        return "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
     except subprocess.CalledProcessError as e:
         return f"Error generating routes: Subprocess exited with code {e.returncode}"
     except Exception as e:
@@ -171,12 +204,16 @@ def run_gui_simulation(auto_start: bool = True, delay: int = 150) -> str:
     if not os.path.exists("mymap.sumocfg"):
         return "Error: 'mymap.sumocfg' not found. Please run 'generate_routes' first."
 
+    # Ensure gui-settings.xml exists before launching GUI
+    if not os.path.exists("gui-settings.xml"):
+        create_gui_settings("mymap.net.xml", "gui-settings.xml")
+
     try:
-        cmd = [sumo_gui_bin, "-c", "mymap.sumocfg", "--delay", str(delay)]
+        cmd = [sumo_gui_bin, "-c", "mymap.sumocfg", "-g", "gui-settings.xml", "--delay", str(delay)]
         if auto_start:
             cmd.append("--start")
         subprocess.Popen(cmd)
-        return f"Success: SUMO GUI app launched on desktop with {delay}ms step delay for smooth visual playback."
+        return f"Success: SUMO GUI app launched on desktop with centered viewport, enlarged vehicles (3.5x), real world theme, and {delay}ms step delay."
     except Exception as e:
         return f"Error launching SUMO GUI: {str(e)}"
 

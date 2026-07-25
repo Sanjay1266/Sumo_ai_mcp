@@ -2,6 +2,7 @@
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
+        <gui-settings-file value="gui-settings.xml"/>
     </input>
     <time>
         <begin value="0"/>

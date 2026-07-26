@@ -328,9 +328,7 @@ export class SumoTools {
     })
   })
   async runGuiSimulation(input: { autoStart?: boolean; delay?: number }, ctx: ExecutionContext) {
-    ctx.logger.info('Launching SUMO GUI desktop application...');
-    const sumoGuiBin = findSumoBinary('sumo-gui');
-    const stepDelay = input.delay || 150;
+    ctx.logger.info('Launching SUMO GUI application...');
 
     if (!fs.existsSync('mymap.sumocfg')) {
       return {
@@ -343,18 +341,37 @@ export class SumoTools {
       this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');
     }
 
+    const isHeadless = process.env.HEADLESS_MODE === 'true' || process.env.NITRO_CLOUD === 'true';
+
+    if (isHeadless) {
+      ctx.logger.info('Headless Cloud Environment detected (HEADLESS_MODE=true). Running simulation headlessly...');
+      await this.runHeadlessSimulation({}, ctx);
+      return {
+        status: 'success',
+        mode: 'cloud_headless',
+        message: "Simulation completed headlessly on NitroStack Cloud. 'stats.xml' & 'tripinfo.xml' generated. To view the live simulation GUI on your local desktop machine, run 'npm run launch:local'."
+      };
+    }
+
+    const sumoGuiBin = findSumoBinary('sumo-gui');
+    const stepDelay = input.delay || 150;
+
     try {
       const autoStartFlag = input.autoStart !== false ? '--start' : '';
       execSync(`start "" "${sumoGuiBin}" -c mymap.sumocfg -g gui-settings.xml --delay ${stepDelay} ${autoStartFlag}`);
 
       return {
         status: 'success',
-        message: `Success: SUMO GUI application launched on desktop with centered viewport, enlarged vehicles (3.5x), real world scheme, and ${stepDelay}ms step delay.`
+        mode: 'local_gui',
+        message: `Success: SUMO GUI application launched on desktop with centered viewport, sublane resolution, real world scheme, and ${stepDelay}ms step delay.`
       };
     } catch (e: any) {
+      ctx.logger.warn(`Could not open GUI directly (${e.message}). Falling back to headless simulation...`);
+      await this.runHeadlessSimulation({}, ctx);
       return {
-        status: 'error',
-        message: `Error launching SUMO GUI: ${e.message}`
+        status: 'success',
+        mode: 'cloud_fallback_headless',
+        message: `Headless fallback completed. Desktop GUI launch unavailable in current server environment. Run 'npm run launch:local' on your local desktop machine.`
       };
     }
   }

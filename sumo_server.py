@@ -315,8 +315,6 @@ def run_gui_simulation(auto_start: bool = True, delay: int = 150) -> str:
     :param delay: Milliseconds of delay per simulation step to ensure human-visible smooth playback (default: 150ms)
     :return: Confirmation message.
     """
-    sumo_gui_bin = find_sumo_binary("sumo-gui")
-
     if not os.path.exists("mymap.sumocfg"):
         return "Error: 'mymap.sumocfg' not found. Please run 'generate_routes' first."
 
@@ -324,14 +322,23 @@ def run_gui_simulation(auto_start: bool = True, delay: int = 150) -> str:
     if not os.path.exists("gui-settings.xml"):
         create_gui_settings("mymap.net.xml", "gui-settings.xml")
 
+    is_headless = os.getenv("HEADLESS_MODE", "false").lower() == "true" or os.getenv("NITRO_CLOUD", "false").lower() == "true"
+
+    if is_headless:
+        run_headless_simulation()
+        return "Simulation completed headlessly on NitroStack Cloud. 'stats.xml' & 'tripinfo.xml' generated. To view the live simulation GUI on your local desktop machine, run 'npm run launch:local'."
+
+    sumo_gui_bin = find_sumo_binary("sumo-gui")
+
     try:
         cmd = [sumo_gui_bin, "-c", "mymap.sumocfg", "-g", "gui-settings.xml", "--delay", str(delay)]
         if auto_start:
             cmd.append("--start")
         subprocess.Popen(cmd)
-        return f"Success: SUMO GUI app launched on desktop with centered viewport, enlarged vehicles (3.5x), real world theme, and {delay}ms step delay."
+        return f"Success: SUMO GUI app launched on desktop with centered viewport, sublane resolution, real world theme, and {delay}ms step delay."
     except Exception as e:
-        return f"Error launching SUMO GUI: {str(e)}"
+        run_headless_simulation()
+        return f"Headless fallback completed ({str(e)}). Desktop GUI launch unavailable in current server environment. Run 'npm run launch:local' on your local desktop machine."
 
 
 

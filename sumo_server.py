@@ -52,13 +52,27 @@ import urllib.request
 import urllib.parse
 
 
+def clamp_bbox(min_lon: float, min_lat: float, max_lon: float, max_lat: float, max_span: float = 0.025) -> str:
+    """Clamps a bounding box to a focal region (~2.5km x 2.5km) around its center point to prevent OSM Overpass API timeouts."""
+    center_lon = (min_lon + max_lon) / 2.0
+    center_lat = (min_lat + max_lat) / 2.0
+    half_span = max_span / 2.0
+
+    clamped_min_lon = center_lon - half_span
+    clamped_min_lat = center_lat - half_span
+    clamped_max_lon = center_lon + half_span
+    clamped_max_lat = center_lat + half_span
+
+    return f"{clamped_min_lon:.4f},{clamped_min_lat:.4f},{clamped_max_lon:.4f},{clamped_max_lat:.4f}"
+
+
 def resolve_location_to_bbox(location_or_bbox: str) -> str:
     """
-    Automatically converts place names (e.g. 'Erode City Center', 'Ettimadai', 'Amrita University', 'Coimbatore') 
-    or numerical bbox strings ('min_lon,min_lat,max_lon,max_lat') into SUMO bbox format automatically.
+    Converts place/neighborhood names (e.g. 'Gandhipuram', 'Peelamedu', 'RS Puram', 'Ukkadam', 'Ettimadai') 
+    or coordinate strings ('min_lon,min_lat,max_lon,max_lat') into a clamped SUMO bounding box.
     """
     if not location_or_bbox:
-        return "76.890,10.895,76.915,10.915"
+        return "76.8900,10.8950,76.9150,10.9150"
 
     query_str = location_or_bbox.strip()
 
@@ -67,20 +81,26 @@ def resolve_location_to_bbox(location_or_bbox: str) -> str:
     if len(parts) == 4:
         try:
             floats = [float(p) for p in parts]
-            return f"{floats[0]},{floats[1]},{floats[2]},{floats[3]}"
+            return clamp_bbox(floats[0], floats[1], floats[2], floats[3])
         except ValueError:
             pass
 
-    # High-precision offline presets for instant resolution
+    # High-precision local presets for Coimbatore & regional hubs
     presets = {
-        "ettimadai": "76.890,10.895,76.915,10.915",
-        "amrita": "76.898,10.900,76.910,10.910",
-        "erode": "77.700,11.330,77.780,11.410",
-        "coimbatore": "76.940,11.000,76.980,11.030",
-        "chennai": "80.250,13.060,80.290,13.100",
-        "bangalore": "77.580,12.960,77.620,13.000",
-        "bengaluru": "77.580,12.960,77.620,13.000",
-        "delhi": "77.200,28.600,77.240,28.640"
+        "ettimadai": "76.8900,10.8950,76.9150,10.9150",
+        "amrita": "76.8980,10.9000,76.9100,10.9100",
+        "gandhipuram": "76.9550,10.9950,76.9800,11.0200",
+        "peelamedu": "76.9950,11.0150,77.0200,11.0400",
+        "rspuram": "76.9350,10.9950,76.9600,11.0200",
+        "rs puram": "76.9350,10.9950,76.9600,11.0200",
+        "ukkadam": "76.9450,10.9750,76.9700,11.0000",
+        "saravanampatti": "76.9750,11.0650,77.0000,11.0900",
+        "erode": "77.7200,11.3350,77.7450,11.3600",
+        "coimbatore": "76.9500,10.9950,76.9750,11.0200",
+        "chennai": "80.2600,13.0650,80.2850,13.0900",
+        "bangalore": "77.5850,12.9650,77.6100,12.9900",
+        "bengaluru": "77.5850,12.9650,77.6100,12.9900",
+        "delhi": "77.2100,28.6100,77.2350,28.6350"
     }
 
     key = query_str.lower()
@@ -92,26 +112,26 @@ def resolve_location_to_bbox(location_or_bbox: str) -> str:
     try:
         url = "https://nominatim.openstreetmap.org/search?q=" + urllib.parse.quote(query_str) + "&format=json"
         req = urllib.request.Request(url, headers={'User-Agent': 'SUMO-MCP-AutoGeocoder/1.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=4) as response:
             data = json.loads(response.read().decode('utf-8'))
             if data and len(data) > 0:
                 boundingbox = data[0].get('boundingbox')  # [southLat, northLat, westLon, eastLon]
                 if boundingbox and len(boundingbox) == 4:
                     min_lat, max_lat, min_lon, max_lon = [float(x) for x in boundingbox]
-                    return f"{min_lon:.4f},{min_lat:.4f},{max_lon:.4f},{max_lat:.4f}"
+                    return clamp_bbox(min_lon, min_lat, max_lon, max_lat)
     except Exception:
         pass
 
-    return query_str
+    return "76.8900,10.8950,76.9150,10.9150"
 
 
 @mcp.tool()
 def generate_network(bbox: str) -> str:
     """
     Step 1: Network Generation Tool
-    Downloads OpenStreetMap data automatically using a location name (e.g. 'Erode City Center', 'Ettimadai') or bounding box and converts it into a SUMO network file (.net.xml).
+    Dynamically geocodes area/neighborhood names (e.g. 'Gandhipuram', 'Peelamedu', 'RS Puram', 'Ukkadam', 'Ettimadai') or coordinate box, cleans old maps, and converts fresh OpenStreetMap data into mymap.net.xml.
 
-    :param bbox: Location name (e.g. 'Erode City Center', 'Ettimadai') or bounding box string ('min_lon,min_lat,max_lon,max_lat')
+    :param bbox: Area or neighborhood name (e.g. 'Gandhipuram', 'Peelamedu', 'RS Puram', 'Ukkadam', 'Ettimadai') or bounding box string ('min_lon,min_lat,max_lon,max_lat')
     :return: Confirmation message when mymap.net.xml is created.
     """
     target_bbox = resolve_location_to_bbox(bbox)
@@ -119,6 +139,14 @@ def generate_network(bbox: str) -> str:
     netconvert_bin = find_sumo_binary("netconvert")
 
     try:
+        # Step 0: Clean up stale map files to prevent reusing old maps from previous runs
+        for f in os.listdir("."):
+            if f.startswith("mymap") and (f.endswith(".osm") or f.endswith(".osm.xml") or f.endswith(".net.xml")):
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
+
         # Execute osmGet.py to download map data for given bounding box and prefix 'mymap'
         subprocess.run([sys.executable, osm_script, "-b", target_bbox, "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
@@ -129,11 +157,26 @@ def generate_network(bbox: str) -> str:
         # Execute netconvert to convert downloaded OpenStreetMap file into SUMO XML network format
         subprocess.run([netconvert_bin, "--osm-files", osm_input, "-o", "mymap.net.xml"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
-        return f"Success: Network file 'mymap.net.xml' is ready for bbox ({target_bbox})."
+        return f"Success: Network file 'mymap.net.xml' generated for '{bbox}' (clamped focal bbox: {target_bbox})."
     except subprocess.CalledProcessError as e:
-        return f"Error generating network: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
+        return f"Error generating network for '{bbox}': Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
-        return f"Error generating network: {str(e)}"
+        return f"Error generating network for '{bbox}': {str(e)}"
+
+
+def create_vtypes_file(file_path: str = "vtypes.add.xml") -> None:
+    """Helper to auto-generate SUMO additional file with heterogeneous Indian vehicle types distribution."""
+    vtypes_xml = """<additional>
+    <vTypeDistribution id="indian_mixed">
+        <vType id="ind_motorcycle" vClass="motorcycle" length="1.8" width="0.8" minGap="0.5" maxSpeed="16.67" accel="3.5" decel="5.0" probability="0.35" color="1,0.3,0.3" latAlignment="arbitrary"/>
+        <vType id="ind_autorickshaw" vClass="moped" length="2.6" width="1.3" minGap="0.8" maxSpeed="13.89" accel="2.0" decel="4.5" probability="0.20" color="1,0.8,0" latAlignment="arbitrary"/>
+        <vType id="ind_car" vClass="passenger" length="4.3" width="1.8" minGap="1.0" maxSpeed="22.22" accel="2.6" decel="4.5" probability="0.30" color="0.2,0.6,1"/>
+        <vType id="ind_bus" vClass="bus" length="10.5" width="2.5" minGap="2.0" maxSpeed="13.89" accel="1.2" decel="3.5" probability="0.08" color="0.2,0.8,0.2"/>
+        <vType id="ind_truck" vClass="truck" length="8.0" width="2.4" minGap="2.0" maxSpeed="13.89" accel="1.0" decel="3.0" probability="0.07" color="0.8,0.5,0.2"/>
+    </vTypeDistribution>
+</additional>"""
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(vtypes_xml)
 
 
 def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str = "gui-settings.xml") -> None:
@@ -158,7 +201,7 @@ def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str 
     <scheme name="real world"/>
     <delay value="150"/>
     <viewport zoom="{zoom:.2f}" x="{center_x:.2f}" y="{center_y:.2f}"/>
-    <vehicles vehicleScale="3.5"/>
+    <vehicles vehicleScale="2.5" vehicleColorer="by vType"/>
 </viewsettings>"""
 
     with open(gui_settings_file, "w", encoding="utf-8") as f:
@@ -166,42 +209,57 @@ def create_gui_settings(net_file: str = "mymap.net.xml", gui_settings_file: str 
 
 
 @mcp.tool()
-def generate_routes(trips: int = 200, duration: int = 7200) -> str:
+def generate_routes(trips: int = 600, duration: int = 7200, density: str = None) -> str:
     """
     Step 2: Route Generation Tool
-    Generates random trip routes for the SUMO network and programmatically creates the sumocfg file.
+    Generates random trip routes for heterogeneous Indian traffic (motorcycles, autos, cars, buses, trucks) and sublane configuration file.
 
-    :param trips: Total number of vehicles/trips to generate across the simulation duration
+    :param trips: Total number of vehicles/trips to generate across the simulation duration (default: 600)
     :param duration: Total simulation duration in seconds (default: 7200 seconds / 2 hours)
+    :param density: Optional preset density level ('low': 250, 'medium': 600, 'high': 1200, 'congested': 2000)
     :return: Confirmation message when mymap.sumocfg is created.
     """
     trips_script = find_sumo_script("randomTrips.py")
-    period = max(1, duration // max(1, trips))
+    
+    total_trips = trips
+    if density:
+        density_map = {"low": 250, "medium": 600, "high": 1200, "congested": 2000}
+        total_trips = density_map.get(density.lower(), trips)
+
+    period = max(1, duration // max(1, total_trips))
 
     if not os.path.exists("mymap.net.xml"):
         return "Error: 'mymap.net.xml' not found. Please run 'generate_network' first."
 
     try:
-        # Execute randomTrips.py to generate random routes on the network over specified duration
+        # Step 1: Create heterogeneous Indian vehicle types file
+        create_vtypes_file("vtypes.add.xml")
+
+        # Step 2: Execute randomTrips.py to generate random routes on the network over specified duration with indian_mixed distribution
         subprocess.run([
             sys.executable, trips_script,
             "-n", "mymap.net.xml",
             "-e", str(duration),
             "-p", str(period),
             "-l",
-            "-r", "mymap.rou.xml"
+            "-r", "mymap.rou.xml",
+            "-a", "vtypes.add.xml",
+            "--trip-attributes", 'type="indian_mixed"'
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
-        # Generate GUI visual enhancement settings file
+        # Step 3: Generate GUI visual enhancement settings file
         create_gui_settings("mymap.net.xml", "gui-settings.xml")
 
-        # Programmatically create mymap.sumocfg XML file referencing network, route, and gui-settings files
+        # Step 4: Programmatically create mymap.sumocfg XML file referencing network, route, and sublane settings
         sumocfg_content = f"""<configuration>
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
         <gui-settings-file value="gui-settings.xml"/>
     </input>
+    <processing>
+        <lateral-resolution value="0.8"/>
+    </processing>
     <time>
         <begin value="0"/>
         <end value="{duration}"/>
@@ -211,7 +269,7 @@ def generate_routes(trips: int = 200, duration: int = 7200) -> str:
         with open("mymap.sumocfg", "w", encoding="utf-8") as f:
             f.write(sumocfg_content)
 
-        return "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
+        return f"Success: SUMO configuration file 'mymap.sumocfg' generated with {total_trips} trips across heterogeneous vehicle types (motorcycles, autos, cars, buses, trucks) and sublane resolution."
     except subprocess.CalledProcessError as e:
         return f"Error generating routes: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
@@ -321,20 +379,21 @@ def analyze_results() -> dict:
 
 
 @mcp.tool()
-def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launch_gui: bool = True) -> dict:
+def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, density: str = None, launch_gui: bool = True) -> dict:
     """
     Master Orchestration Tool
     Executes the COMPLETE SUMO simulation pipeline end-to-end in a SINGLE call without multi-turn prompting:
     1. Downloads OSM map data for bbox & generates network (.net.xml)
-    2. Generates vehicle routes (.rou.xml & sumocfg)
-    3. Auto-configures centered 3.5x visual GUI settings (gui-settings.xml)
+    2. Generates vehicle routes (.rou.xml, vtypes.add.xml & sumocfg)
+    3. Auto-configures centered visual GUI settings (gui-settings.xml)
     4. Executes headless simulation & produces statistics XML
     5. Automatically opens SUMO GUI desktop app for live visual playback
     6. Parses and returns final traffic analytics metrics
 
     :param bbox: Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)
-    :param trips: Total number of vehicle trips to generate
+    :param trips: Total number of vehicle trips to generate (default: 600)
     :param duration: Total simulation duration in seconds (default: 7200s / 2 hours)
+    :param density: Optional preset density level ('low': 250, 'medium': 600, 'high': 1200, 'congested': 2000)
     :param launch_gui: Automatically open the visual SUMO GUI app on desktop (default: True)
     :return: Combined result dictionary containing status messages and final analytics.
     """
@@ -343,8 +402,8 @@ def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launc
     if net_res.startswith("Error"):
         return {"status": "error", "step": "generate_network", "message": net_res}
 
-    # Step 2: Generate routes & gui settings
-    routes_res = generate_routes(trips=trips, duration=duration)
+    # Step 2: Generate routes & gui settings with heterogeneous vehicle distribution
+    routes_res = generate_routes(trips=trips, duration=duration, density=density)
     if routes_res.startswith("Error"):
         return {"status": "error", "step": "generate_routes", "message": routes_res}
 
@@ -364,6 +423,7 @@ def run_full_simulation(bbox: str, trips: int = 250, duration: int = 7200, launc
         "bbox": bbox,
         "trips": trips,
         "duration": duration,
+        "density": density or "medium",
         "gui_launched": launch_gui,
         "network_status": net_res,
         "routes_status": routes_res,

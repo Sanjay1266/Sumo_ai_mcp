@@ -1,6 +1,6 @@
 <viewsettings>
     <scheme name="real world"/>
     <delay value="150"/>
-    <viewport zoom="400.00" x="11041.81" y="23150.28"/>
-    <vehicles vehicleScale="3.5"/>
+    <viewport zoom="400.00" x="3124.90" y="2137.25"/>
+    <vehicles vehicleScale="2.5" vehicleColorer="by vType"/>
 </viewsettings>

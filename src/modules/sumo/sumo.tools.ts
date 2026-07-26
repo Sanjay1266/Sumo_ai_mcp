@@ -2,6 +2,7 @@ import { ToolDecorator as Tool, ExecutionContext, z } from '@nitrostack/core';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 
 function findSumoScript(scriptName: string): string {
   if (fs.existsSync(scriptName)) {
@@ -34,59 +35,121 @@ function findSumoBinary(binaryName: string): string {
   return binaryName;
 }
 
-export class SumoTools {
-  private resolveLocationToBbox(locationOrBbox: string): string {
-    if (!locationOrBbox) return '76.890,10.895,76.915,10.915';
-    const query = locationOrBbox.trim();
-    const parts = query.split(',');
-    if (parts.length === 4) {
-      const floats = parts.map((p) => parseFloat(p));
-      if (!floats.some((f) => isNaN(f))) {
-        return floats.join(',');
-      }
+function clampBbox(minLon: number, minLat: number, maxLon: number, maxLat: number, maxSpan = 0.025): string {
+  const centerLon = (minLon + maxLon) / 2.0;
+  const centerLat = (minLat + maxLat) / 2.0;
+  const halfSpan = maxSpan / 2.0;
+
+  const clampedMinLon = (centerLon - halfSpan).toFixed(4);
+  const clampedMinLat = (centerLat - halfSpan).toFixed(4);
+  const clampedMaxLon = (centerLon + halfSpan).toFixed(4);
+  const clampedMaxLat = (centerLat + halfSpan).toFixed(4);
+
+  return `${clampedMinLon},${clampedMinLat},${clampedMaxLon},${clampedMaxLat}`;
+}
+
+async function resolveLocationToBboxAsync(locationOrBbox: string): Promise<string> {
+  if (!locationOrBbox) return '76.8900,10.8950,76.9150,10.9150';
+  const query = locationOrBbox.trim();
+
+  // Check if already a 4-comma numerical string
+  const parts = query.split(',');
+  if (parts.length === 4) {
+    const floats = parts.map((p) => parseFloat(p));
+    if (!floats.some((f) => isNaN(f))) {
+      return clampBbox(floats[0], floats[1], floats[2], floats[3]);
     }
-
-    const presets: Record<string, string> = {
-      ettimadai: '76.890,10.895,76.915,10.915',
-      amrita: '76.898,10.900,76.910,10.910',
-      erode: '77.700,11.330,77.780,11.410',
-      coimbatore: '76.940,11.000,76.980,11.030',
-      chennai: '80.250,13.060,80.290,13.100',
-      bangalore: '77.580,12.960,77.620,13.000',
-      bengaluru: '77.580,12.960,77.620,13.000',
-      delhi: '77.200,28.600,77.240,28.640'
-    };
-
-    const key = query.toLowerCase();
-    for (const [name, bbox] of Object.entries(presets)) {
-      if (key.includes(name)) {
-        return bbox;
-      }
-    }
-
-    return query;
   }
 
+  // High-precision local presets (Coimbatore & regional hubs)
+  const presets: Record<string, string> = {
+    ettimadai: '76.8900,10.8950,76.9150,10.9150',
+    amrita: '76.8980,10.9000,76.9100,10.9100',
+    gandhipuram: '76.9550,10.9950,76.9800,11.0200',
+    peelamedu: '76.9950,11.0150,77.0200,11.0400',
+    rspuram: '76.9350,10.9950,76.9600,11.0200',
+    'rs puram': '76.9350,10.9950,76.9600,11.0200',
+    ukkadam: '76.9450,10.9750,76.9700,11.0000',
+    saravanampatti: '76.9750,11.0650,77.0000,11.0900',
+    erode: '77.7200,11.3350,77.7450,11.3600',
+    coimbatore: '76.9500,10.9950,76.9750,11.0200',
+    chennai: '80.2600,13.0650,80.2850,13.0900',
+    bangalore: '77.5850,12.9650,77.6100,12.9900',
+    bengaluru: '77.5850,12.9650,77.6100,12.9900',
+    delhi: '77.2100,28.6100,77.2350,28.6350'
+  };
+
+  const key = query.toLowerCase();
+  for (const [name, bbox] of Object.entries(presets)) {
+    if (key.includes(name)) {
+      return bbox;
+    }
+  }
+
+  // Dynamic OpenStreetMap Nominatim Geocoding API lookup
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json`;
+    const responseData = await new Promise<string>((resolve, reject) => {
+      const req = https.get(url, { headers: { 'User-Agent': 'NitroStack-SUMO-Geocoder/1.0' } }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => resolve(data));
+      });
+      req.on('error', reject);
+      req.setTimeout(4000, () => {
+        req.destroy();
+        reject(new Error('Nominatim timeout'));
+      });
+    });
+
+    const parsed = JSON.parse(responseData);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const bboxArr = parsed[0].boundingbox; // [southLat, northLat, westLon, eastLon]
+      if (bboxArr && bboxArr.length === 4) {
+        const minLat = parseFloat(bboxArr[0]);
+        const maxLat = parseFloat(bboxArr[1]);
+        const minLon = parseFloat(bboxArr[2]);
+        const maxLon = parseFloat(bboxArr[3]);
+        return clampBbox(minLon, minLat, maxLon, maxLat);
+      }
+    }
+  } catch (e) {
+    // Fallback to default focal area if geocoding times out
+  }
+
+  return '76.8900,10.8950,76.9150,10.9150';
+}
+
+export class SumoTools {
   @Tool({
     name: 'generate_network',
-    description: 'Step 1: Download OSM map data automatically using a location name (e.g. "Erode City Center", "Ettimadai") or bounding box coordinates and convert it into a SUMO network file (mymap.net.xml).',
+    description: 'Step 1: Dynamically geocode area/neighborhood names (e.g. "Gandhipuram", "Peelamedu", "RS Puram", "Ukkadam", "Ettimadai") or coordinate box, clean old maps, and convert fresh OpenStreetMap data into mymap.net.xml.',
     inputSchema: z.object({
-      bbox: z.string().describe('Location name (e.g. "Erode City Center", "Ettimadai", "Amrita University") or coordinate string (min_lon,min_lat,max_lon,max_lat)')
+      bbox: z.string().describe('Area or neighborhood name (e.g. "Gandhipuram", "Peelamedu", "RS Puram", "Ukkadam", "Ettimadai") or coordinate string (min_lon,min_lat,max_lon,max_lat)')
     })
   })
   async generateNetwork(input: { bbox: string }, ctx: ExecutionContext) {
-    const targetBbox = this.resolveLocationToBbox(input.bbox);
-    ctx.logger.info(`Generating SUMO network for location '${input.bbox}' (resolved bbox: ${targetBbox})`);
+    const targetBbox = await resolveLocationToBboxAsync(input.bbox);
+    ctx.logger.info(`Generating SUMO network for location '${input.bbox}' (resolved clamped bbox: ${targetBbox})`);
 
     const osmScript = findSumoScript('osmGet.py');
     const netconvertBin = findSumoBinary('netconvert');
+    const cwd = process.cwd();
 
     try {
+      // Step 0: Clean up any stale map files to prevent reusing old maps from previous runs
+      const existingFiles = fs.readdirSync(cwd);
+      for (const f of existingFiles) {
+        if (f.startsWith('mymap') && (f.endsWith('.osm') || f.endsWith('.osm.xml') || f.endsWith('.net.xml'))) {
+          try { fs.unlinkSync(path.join(cwd, f)); } catch (e) { }
+        }
+      }
+
       // Step 1: Execute python osmGet.py -b [coords] -p mymap
       execSync(`python "${osmScript}" -b ${targetBbox} -p mymap`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       // Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
-      const files = fs.readdirSync(process.cwd());
+      const files = fs.readdirSync(cwd);
       const osmFiles = files.filter(f => f.startsWith('mymap') && (f.endsWith('.osm') || f.endsWith('.osm.xml')));
       const osmInput = osmFiles.length > 0 ? osmFiles.join(',') : 'mymap.osm';
 
@@ -95,14 +158,27 @@ export class SumoTools {
 
       return {
         status: 'success',
-        message: `Success: Network file 'mymap.net.xml' is ready for location '${input.bbox}' (${targetBbox}).`
+        message: `Success: Network file 'mymap.net.xml' generated for '${input.bbox}' (clamped focal bbox: ${targetBbox}).`
       };
     } catch (e: any) {
       return {
         status: 'error',
-        message: `Error generating network: ${e.message}`
+        message: `Error generating network for '${input.bbox}': ${e.message}`
       };
     }
+  }
+
+  private createVTypesFile(filePath = 'vtypes.add.xml') {
+    const vtypesXml = `<additional>
+    <vTypeDistribution id="indian_mixed">
+        <vType id="ind_motorcycle" vClass="motorcycle" length="1.8" width="0.8" minGap="0.5" maxSpeed="16.67" accel="3.5" decel="5.0" probability="0.35" color="1,0.3,0.3" latAlignment="arbitrary"/>
+        <vType id="ind_autorickshaw" vClass="moped" length="2.6" width="1.3" minGap="0.8" maxSpeed="13.89" accel="2.0" decel="4.5" probability="0.20" color="1,0.8,0" latAlignment="arbitrary"/>
+        <vType id="ind_car" vClass="passenger" length="4.3" width="1.8" minGap="1.0" maxSpeed="22.22" accel="2.6" decel="4.5" probability="0.30" color="0.2,0.6,1"/>
+        <vType id="ind_bus" vClass="bus" length="10.5" width="2.5" minGap="2.0" maxSpeed="13.89" accel="1.2" decel="3.5" probability="0.08" color="0.2,0.8,0.2"/>
+        <vType id="ind_truck" vClass="truck" length="8.0" width="2.4" minGap="2.0" maxSpeed="13.89" accel="1.0" decel="3.0" probability="0.07" color="0.8,0.5,0.2"/>
+    </vTypeDistribution>
+</additional>`;
+    fs.writeFileSync(path.join(process.cwd(), filePath), vtypesXml, 'utf-8');
   }
 
   private createGuiSettings(netFile = 'mymap.net.xml', settingsFile = 'gui-settings.xml') {
@@ -134,7 +210,7 @@ export class SumoTools {
     <scheme name="real world"/>
     <delay value="150"/>
     <viewport zoom="${zoom.toFixed(2)}" x="${centerX.toFixed(2)}" y="${centerY.toFixed(2)}"/>
-    <vehicles vehicleScale="3.5"/>
+    <vehicles vehicleScale="2.5" vehicleColorer="by vType"/>
 </viewsettings>`;
 
     fs.writeFileSync(path.join(process.cwd(), settingsFile), guiXml, 'utf-8');
@@ -142,18 +218,24 @@ export class SumoTools {
 
   @Tool({
     name: 'generate_routes',
-    description: 'Step 2: Generate random trips/routes for the network and create the mymap.sumocfg XML configuration file.',
+    description: 'Step 2: Generate random trips/routes for heterogeneous Indian traffic (motorcycles, autos, cars, buses, trucks) and sublane configuration file.',
     inputSchema: z.object({
-      trips: z.number().optional().default(200).describe('Total number of trips to generate across simulation duration'),
-      duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)')
+      trips: z.number().optional().default(600).describe('Total number of trips to generate across simulation duration (default: 600)'),
+      duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)'),
+      density: z.enum(['low', 'medium', 'high', 'congested']).optional().describe('Preset traffic density level (low: 250, medium: 600, high: 1200, congested: 2000 trips)')
     })
   })
-  async generateRoutes(input: { trips?: number; duration?: number }, ctx: ExecutionContext) {
-    const totalTrips = input.trips || 200;
+  async generateRoutes(input: { trips?: number; duration?: number; density?: 'low' | 'medium' | 'high' | 'congested' }, ctx: ExecutionContext) {
+    let totalTrips = input.trips || 600;
+    if (input.density) {
+      const densityMap: Record<string, number> = { low: 250, medium: 600, high: 1200, congested: 2000 };
+      totalTrips = densityMap[input.density] || totalTrips;
+    }
+
     const totalDuration = input.duration || 7200;
     const period = Math.max(1, Math.floor(totalDuration / totalTrips));
 
-    ctx.logger.info(`Generating SUMO routes for ${totalTrips} trips over ${totalDuration}s (period=${period})`);
+    ctx.logger.info(`Generating heterogeneous SUMO routes for ${totalTrips} trips over ${totalDuration}s (period=${period})`);
 
     const tripsScript = findSumoScript('randomTrips.py');
 
@@ -165,19 +247,25 @@ export class SumoTools {
     }
 
     try {
-      // Step 1: Execute python randomTrips.py -n mymap.net.xml -e [duration] -p [period] -l -r mymap.rou.xml
-      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml`, { stdio: ['ignore', 'pipe', 'pipe'] });
+      // Step 1: Create heterogeneous Indian vehicle types file (motorcycles, autorickshaws, cars, buses, trucks)
+      this.createVTypesFile('vtypes.add.xml');
 
-      // Step 2: Auto-generate GUI visual settings file
+      // Step 2: Execute python randomTrips.py with indian_mixed vType distribution
+      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml -a vtypes.add.xml --trip-attributes "type=\\"indian_mixed\\""`, { stdio: ['ignore', 'pipe', 'pipe'] });
+
+      // Step 3: Auto-generate GUI visual settings file
       this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');
 
-      // Step 3: Programmatically generate mymap.sumocfg XML file referencing net, routes, and gui-settings
+      // Step 4: Programmatically generate mymap.sumocfg XML file referencing net, routes, and sublane processing
       const sumocfgContent = `<configuration>
     <input>
         <net-file value="mymap.net.xml"/>
         <route-files value="mymap.rou.xml"/>
         <gui-settings-file value="gui-settings.xml"/>
     </input>
+    <processing>
+        <lateral-resolution value="0.8"/>
+    </processing>
     <time>
         <begin value="0"/>
         <end value="${totalDuration}"/>
@@ -188,7 +276,7 @@ export class SumoTools {
 
       return {
         status: 'success',
-        message: "Success: SUMO configuration file 'mymap.sumocfg' and visual 'gui-settings.xml' are ready."
+        message: `Success: SUMO configuration file 'mymap.sumocfg' generated with ${totalTrips} trips across heterogeneous vehicle types (motorcycles, autos, cars, buses, trucks) and sublane resolution.`
       };
     } catch (e: any) {
       return {
@@ -315,13 +403,14 @@ export class SumoTools {
     description: 'Master Orchestration Tool: Executes the complete end-to-end SUMO traffic simulation pipeline in a single call (downloads network, generates routes, opens GUI, and analyzes results).',
     inputSchema: z.object({
       bbox: z.string().describe('Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)'),
-      trips: z.number().optional().default(250).describe('Total number of vehicle trips to simulate'),
+      trips: z.number().optional().default(600).describe('Total number of vehicle trips to simulate (default: 600)'),
       duration: z.number().optional().default(7200).describe('Total simulation duration in seconds (default: 7200s / 2 hours)'),
+      density: z.enum(['low', 'medium', 'high', 'congested']).optional().describe('Preset traffic density level (low: 250, medium: 600, high: 1200, congested: 2000 trips)'),
       launchGui: z.boolean().optional().default(true).describe('Automatically open the visual SUMO GUI desktop application')
     })
   })
   async runFullSimulation(
-    input: { bbox: string; trips?: number; duration?: number; launchGui?: boolean },
+    input: { bbox: string; trips?: number; duration?: number; density?: 'low' | 'medium' | 'high' | 'congested'; launchGui?: boolean },
     ctx: ExecutionContext
   ) {
     ctx.logger.info(`Running full end-to-end simulation for bbox: ${input.bbox}`);
@@ -331,7 +420,8 @@ export class SumoTools {
       return { status: 'error', step: 'generate_network', message: netRes.message };
     }
 
-    const routesRes = await this.generateRoutes({ trips: input.trips || 250, duration: input.duration || 7200 }, ctx);
+    const targetTrips = input.trips || 600;
+    const routesRes = await this.generateRoutes({ trips: targetTrips, duration: input.duration || 7200, density: input.density }, ctx);
     if (routesRes.status === 'error') {
       return { status: 'error', step: 'generate_routes', message: routesRes.message };
     }
@@ -348,8 +438,9 @@ export class SumoTools {
     return {
       status: 'success',
       bbox: input.bbox,
-      trips: input.trips || 250,
+      trips: targetTrips,
       duration: input.duration || 7200,
+      density: input.density || 'medium',
       gui_launched: input.launchGui !== false,
       network_status: netRes.message,
       routes_status: routesRes.message,

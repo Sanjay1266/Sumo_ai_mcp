@@ -3,13 +3,32 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
+
+function getPythonExecutable(): string {
+  const envPython = process.env.PYTHON_PATH;
+  if (envPython && envPython.trim()) {
+    return envPython.trim();
+  }
+
+  // Check if python3 is available in PATH
+  try {
+    execSync('python3 --version', { stdio: 'ignore' });
+    return 'python3';
+  } catch (e) { }
+
+  return 'python';
+}
 
 function findSumoScript(scriptName: string): string {
   if (fs.existsSync(scriptName)) {
     return scriptName;
   }
-  const sumoHome = process.env.SUMO_HOME;
-  if (sumoHome) {
+  const sumoHomeRaw = process.env.SUMO_HOME;
+  if (sumoHomeRaw) {
+    const sumoHome = sumoHomeRaw.trim().replace(/[/\\]+$/, '');
     const candidates = [
       path.join(sumoHome, 'tools', 'osm', scriptName),
       path.join(sumoHome, 'tools', scriptName),
@@ -24,8 +43,9 @@ function findSumoScript(scriptName: string): string {
 }
 
 function findSumoBinary(binaryName: string): string {
-  const sumoHome = process.env.SUMO_HOME;
-  if (sumoHome) {
+  const sumoHomeRaw = process.env.SUMO_HOME;
+  if (sumoHomeRaw) {
+    const sumoHome = sumoHomeRaw.trim().replace(/[/\\]+$/, '');
     const ext = process.platform === 'win32' ? '.exe' : '';
     const cand = path.join(sumoHome, 'bin', `${binaryName}${ext}`);
     if (fs.existsSync(cand)) {
@@ -146,7 +166,8 @@ export class SumoTools {
       }
 
       // Step 1: Execute python osmGet.py -b [coords] -p mymap
-      execSync(`python "${osmScript}" -b ${targetBbox} -p mymap`, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const pythonBin = getPythonExecutable();
+      execSync(`"${pythonBin}" "${osmScript}" "-b=${targetBbox}" -p mymap`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       // Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
       const files = fs.readdirSync(cwd);
@@ -251,7 +272,8 @@ export class SumoTools {
       this.createVTypesFile('vtypes.add.xml');
 
       // Step 2: Execute python randomTrips.py with indian_mixed vType distribution
-      execSync(`python "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml -a vtypes.add.xml --trip-attributes "type=\\"indian_mixed\\""`, { stdio: ['ignore', 'pipe', 'pipe'] });
+      const pythonBin = getPythonExecutable();
+      execSync(`"${pythonBin}" "${tripsScript}" -n mymap.net.xml -e ${totalDuration} -p ${period} -l -r mymap.rou.xml -a vtypes.add.xml --trip-attributes "type=\\"indian_mixed\\""`, { stdio: ['ignore', 'pipe', 'pipe'] });
 
       // Step 3: Auto-generate GUI visual settings file
       this.createGuiSettings('mymap.net.xml', 'gui-settings.xml');

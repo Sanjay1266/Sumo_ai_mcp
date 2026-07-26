@@ -36,6 +36,11 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+mymap*.xml
+*.osm.xml
+stats.xml
+tripinfo.xml
+trips.trips.xml
 
 # Coverage
 coverage/

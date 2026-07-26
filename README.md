@@ -40,12 +40,18 @@ Instead of manually editing complex XML files, downloading OpenStreetMap raw dat
 ## 🌐 Introduction to Core Environments & Technologies
 
 ### 1. Eclipse SUMO (Simulation of Urban Mobility) Environment
+
+![SUMO GUI Simulation Viewport](assets/sumo_gui_simulation.png)
+
 **Eclipse SUMO** is an open-source, highly portable, microscopic continuous road traffic simulation suite designed to handle large networks. 
 - **Microscopic Modeling**: Every vehicle, motorcycle, bus, and pedestrian is modeled individually with explicit acceleration, deceleration, length, width, minimum gap, and route preferences.
 - **Sublane Resolution**: Enables lateral vehicle positioning (`lateral-resolution="0.8"`), allowing smaller vehicles like motorcycles and autorickshaws to overtake within a single physical lane.
 - **Traffic Reporting**: Generates microscopic performance metrics including trip duration, waiting time, time loss, fuel consumption, carbon emissions, and route lengths (`stats.xml`, `tripinfo.xml`).
 
 ### 2. OpenStreetMap (OSM) & Open Geographical Maps
+
+![Google Maps vs OpenStreetMap](assets/google_maps_vs_openstreetmap.png)
+
 Urban road networks are fetched dynamically from **OpenStreetMap (OSM)**, the world's largest open crowdsourced spatial database:
 - **Overpass API Integration**: `osmGet.py` downloads high-fidelity road geometry, intersections, speed limits, turns, and lane counts.
 - **Nominatim Geocoding API**: Resolves natural language city/neighborhood names (e.g., *"Gandhipuram"*, *"Ettimadai"*, *"Peelamedu"*, *"Coimbatore"*, *"Chennai"*, *"Bangalore"*) into precise geographical bounding boxes (`min_lon,min_lat,max_lon,max_lat`).
@@ -127,45 +133,45 @@ Standard traffic simulators assume homogeneous passenger cars moving in single f
 
 ```mermaid
 flowchart TD
-    A[User Request: "Simulate Coimbatore traffic with 800 trips"] --> B[resolve_location_to_bbox]
-    B -->|Lookup Preset / Nominatim API| C[Clamped Bounding Box: 76.9500,10.9950,76.9750,11.0200]
-    C --> D[generate_network]
-    D -->|Execute osmGet.py| E[Download mymap.osm]
-    E -->|Execute netconvert| F[Generate mymap.net.xml]
-    F --> G[generate_routes]
-    G -->|Create vtypes.add.xml| H[Heterogeneous Indian Traffic Distribution]
-    G -->|Execute randomTrips.py| I[Generate mymap.rou.xml]
-    G -->|Create gui-settings.xml| J[Auto-Centered Camera Viewport]
-    G -->|Create sumocfg| K[mymap.sumocfg]
-    K --> L{Execution Mode?}
-    L -->|Headless| M[run_headless_simulation]
-    L -->|Visual GUI| N[run_gui_simulation]
-    M --> O[Produce stats.xml & tripinfo.xml]
+    A["User Request: Simulate Coimbatore traffic with 800 trips"] --> B["resolve_location_to_bbox"]
+    B -->|"Lookup Preset / Nominatim API"| C["Clamped Bounding Box: 76.9500,10.9950,76.9750,11.0200"]
+    C --> D["generate_network"]
+    D -->|"Execute osmGet.py"| E["Download mymap.osm"]
+    E -->|"Execute netconvert"| F["Generate mymap.net.xml"]
+    F --> G["generate_routes"]
+    G -->|"Create vtypes.add.xml"| H["Heterogeneous Indian Traffic Distribution"]
+    G -->|"Execute randomTrips.py"| I["Generate mymap.rou.xml"]
+    G -->|"Create gui-settings.xml"| J["Auto-Centered Camera Viewport"]
+    G -->|"Create sumocfg"| K["mymap.sumocfg"]
+    K --> L{"Execution Mode?"}
+    L -->|"Headless"| M["run_headless_simulation"]
+    L -->|"Visual GUI"| N["run_gui_simulation"]
+    M --> O["Produce stats.xml and tripinfo.xml"]
     N --> O
-    O --> P[analyze_results]
-    P --> Q[Return JSON Analytics: Vehicles Loaded, Inserted, Avg Route Length]
+    O --> P["analyze_results"]
+    P --> Q["Return JSON Analytics: Vehicles Loaded, Inserted, Avg Route Length"]
 ```
 
 ### Test Suite Workflow Flowchart
 
 ```mermaid
 flowchart TD
-    TA[run_all_test_cases] --> T1[test_geocoder]
-    T1 -->|Verify 10 Locations & Bbox Format| T1_RES[Geocoder PASSED]
+    TA["run_all_test_cases"] --> T1["test_geocoder"]
+    T1 -->|"Verify 10 Locations and Bbox Format"| T1_RES["Geocoder PASSED"]
     
-    TA --> T2[test_network_generation]
-    T2 -->|Execute osmGet & netconvert| T2_RES[Network File PASSED]
+    TA --> T2["test_network_generation"]
+    T2 -->|"Execute osmGet and netconvert"| T2_RES["Network File PASSED"]
     
-    TA --> T3[test_route_generation]
-    T3 -->|Verify vtypes, rou, & sumocfg| T3_RES[Routes File PASSED]
+    TA --> T3["test_route_generation"]
+    T3 -->|"Verify vtypes, rou, and sumocfg"| T3_RES["Routes File PASSED"]
     
-    TA --> T4[test_simulation_execution]
-    T4 -->|Run SUMO Headless| T4_RES[Stats & Tripinfo PASSED]
+    TA --> T4["test_simulation_execution"]
+    T4 -->|"Run SUMO Headless"| T4_RES["Stats and Tripinfo PASSED"]
     
-    TA --> T5[test_analytics_truthfulness]
-    T5 -->|Parse stats.xml vs tool metrics| T5_RES[Truthfulness Audit PASSED]
+    TA --> T5["test_analytics_truthfulness"]
+    T5 -->|"Parse stats.xml vs tool metrics"| T5_RES["Truthfulness Audit PASSED"]
     
-    T1_RES & T2_RES & T3_RES & T4_RES & T5_RES --> TR[Master Test Suite Summary Report]
+    T1_RES & T2_RES & T3_RES & T4_RES & T5_RES --> TR["Master Test Suite Summary Report"]
 ```
 
 ---
@@ -177,6 +183,10 @@ Sumo_simulation/
 ├── sumo_server.py                 # Core FastMCP Python Server (Main Simulation Pipeline)
 ├── sumo_test_server.py            # FastMCP Python Test Suite Server (Isolated Test Tools)
 ├── test_audit.py                  # Standalone Empirical Truthfulness Verification Script
+│
+├── assets/                        # Documentation & Visual Assets
+│   ├── google_maps_vs_openstreetmap.png
+│   └── sumo_gui_simulation.png
 │
 ├── src/
 │   ├── index.ts                   # NitroStack Application Entry Point

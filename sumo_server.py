@@ -4,10 +4,39 @@ import json
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from mcp.server.fastmcp import FastMCP
 
 # Initialize FastMCP server instance for SUMO Simulation Pipeline
 mcp = FastMCP("SUMO Traffic Simulation Server")
+
+
+def get_python_executable() -> str:
+    """
+    Resolves the Python executable to run helper scripts (osmGet.py, randomTrips.py).
+    Checks PYTHON_PATH environment variable first, then sys.executable, then python3/python on PATH.
+    """
+    env_python = os.environ.get("PYTHON_PATH")
+    if env_python and env_python.strip():
+        return env_python.strip()
+
+    if sys.executable:
+        return sys.executable
+
+    which_py3 = shutil.which("python3")
+    if which_py3:
+        return which_py3
+
+    which_py = shutil.which("python")
+    if which_py:
+        return which_py
+
+    return "python"
 
 
 def find_sumo_script(script_name: str) -> str:
@@ -17,8 +46,9 @@ def find_sumo_script(script_name: str) -> str:
     if os.path.exists(script_name):
         return script_name
 
-    sumo_home = os.environ.get("SUMO_HOME")
-    if sumo_home:
+    sumo_home_raw = os.environ.get("SUMO_HOME")
+    if sumo_home_raw:
+        sumo_home = sumo_home_raw.strip().rstrip("/\\")
         candidate_paths = [
             os.path.join(sumo_home, "tools", "osm", script_name),
             os.path.join(sumo_home, "tools", script_name),
@@ -38,8 +68,9 @@ def find_sumo_binary(binary_name: str) -> str:
     if which_path:
         return which_path
 
-    sumo_home = os.environ.get("SUMO_HOME")
-    if sumo_home:
+    sumo_home_raw = os.environ.get("SUMO_HOME")
+    if sumo_home_raw:
+        sumo_home = sumo_home_raw.strip().rstrip("/\\")
         ext = ".exe" if sys.platform == "win32" else ""
         candidate = os.path.join(sumo_home, "bin", f"{binary_name}{ext}")
         if os.path.exists(candidate):
@@ -148,7 +179,8 @@ def generate_network(bbox: str) -> str:
                     pass
 
         # Execute osmGet.py to download map data for given bounding box and prefix 'mymap'
-        subprocess.run([sys.executable, osm_script, "-b", target_bbox, "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        py_bin = get_python_executable()
+        subprocess.run([py_bin, osm_script, f"-b={target_bbox}", "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
         # Detect generated OSM file (e.g. mymap_bbox.osm.xml or mymap.osm)
         osm_files = [f for f in os.listdir(".") if f.startswith("mymap") and (f.endswith(".osm") or f.endswith(".osm.xml"))]
@@ -236,8 +268,9 @@ def generate_routes(trips: int = 600, duration: int = 7200, density: str = None)
         create_vtypes_file("vtypes.add.xml")
 
         # Step 2: Execute randomTrips.py to generate random routes on the network over specified duration with indian_mixed distribution
+        py_bin = get_python_executable()
         subprocess.run([
-            sys.executable, trips_script,
+            py_bin, trips_script,
             "-n", "mymap.net.xml",
             "-e", str(duration),
             "-p", str(period),

@@ -1,5 +1,6 @@
 import { McpApp, Module, ConfigModule } from '@nitrostack/core';
 import { SumoModule } from './modules/sumo/sumo.module.js';
+import { TestModule } from './modules/test/test.module.js';
 import { SystemHealthCheck } from './health/system.health.js';
 
 /**
@@ -23,7 +24,8 @@ import { SystemHealthCheck } from './health/system.health.js';
   description: 'Root SUMO Simulation application module',
   imports: [
     ConfigModule.forRoot(),
-    SumoModule
+    SumoModule,
+    TestModule
   ],
   providers: [
     // Health Checks

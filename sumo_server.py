@@ -52,13 +52,27 @@ import urllib.request
 import urllib.parse
 
 
+def clamp_bbox(min_lon: float, min_lat: float, max_lon: float, max_lat: float, max_span: float = 0.025) -> str:
+    """Clamps a bounding box to a focal region (~2.5km x 2.5km) around its center point to prevent OSM Overpass API timeouts."""
+    center_lon = (min_lon + max_lon) / 2.0
+    center_lat = (min_lat + max_lat) / 2.0
+    half_span = max_span / 2.0
+
+    clamped_min_lon = center_lon - half_span
+    clamped_min_lat = center_lat - half_span
+    clamped_max_lon = center_lon + half_span
+    clamped_max_lat = center_lat + half_span
+
+    return f"{clamped_min_lon:.4f},{clamped_min_lat:.4f},{clamped_max_lon:.4f},{clamped_max_lat:.4f}"
+
+
 def resolve_location_to_bbox(location_or_bbox: str) -> str:
     """
-    Automatically converts place names (e.g. 'Erode City Center', 'Ettimadai', 'Amrita University', 'Coimbatore') 
-    or numerical bbox strings ('min_lon,min_lat,max_lon,max_lat') into SUMO bbox format automatically.
+    Converts place/neighborhood names (e.g. 'Gandhipuram', 'Peelamedu', 'RS Puram', 'Ukkadam', 'Ettimadai') 
+    or coordinate strings ('min_lon,min_lat,max_lon,max_lat') into a clamped SUMO bounding box.
     """
     if not location_or_bbox:
-        return "76.890,10.895,76.915,10.915"
+        return "76.8900,10.8950,76.9150,10.9150"
 
     query_str = location_or_bbox.strip()
 
@@ -67,20 +81,26 @@ def resolve_location_to_bbox(location_or_bbox: str) -> str:
     if len(parts) == 4:
         try:
             floats = [float(p) for p in parts]
-            return f"{floats[0]},{floats[1]},{floats[2]},{floats[3]}"
+            return clamp_bbox(floats[0], floats[1], floats[2], floats[3])
         except ValueError:
             pass
 
-    # High-precision offline presets for instant resolution
+    # High-precision local presets for Coimbatore & regional hubs
     presets = {
-        "ettimadai": "76.890,10.895,76.915,10.915",
-        "amrita": "76.898,10.900,76.910,10.910",
-        "erode": "77.700,11.330,77.780,11.410",
-        "coimbatore": "76.940,11.000,76.980,11.030",
-        "chennai": "80.250,13.060,80.290,13.100",
-        "bangalore": "77.580,12.960,77.620,13.000",
-        "bengaluru": "77.580,12.960,77.620,13.000",
-        "delhi": "77.200,28.600,77.240,28.640"
+        "ettimadai": "76.8900,10.8950,76.9150,10.9150",
+        "amrita": "76.8980,10.9000,76.9100,10.9100",
+        "gandhipuram": "76.9550,10.9950,76.9800,11.0200",
+        "peelamedu": "76.9950,11.0150,77.0200,11.0400",
+        "rspuram": "76.9350,10.9950,76.9600,11.0200",
+        "rs puram": "76.9350,10.9950,76.9600,11.0200",
+        "ukkadam": "76.9450,10.9750,76.9700,11.0000",
+        "saravanampatti": "76.9750,11.0650,77.0000,11.0900",
+        "erode": "77.7200,11.3350,77.7450,11.3600",
+        "coimbatore": "76.9500,10.9950,76.9750,11.0200",
+        "chennai": "80.2600,13.0650,80.2850,13.0900",
+        "bangalore": "77.5850,12.9650,77.6100,12.9900",
+        "bengaluru": "77.5850,12.9650,77.6100,12.9900",
+        "delhi": "77.2100,28.6100,77.2350,28.6350"
     }
 
     key = query_str.lower()
@@ -92,26 +112,26 @@ def resolve_location_to_bbox(location_or_bbox: str) -> str:
     try:
         url = "https://nominatim.openstreetmap.org/search?q=" + urllib.parse.quote(query_str) + "&format=json"
         req = urllib.request.Request(url, headers={'User-Agent': 'SUMO-MCP-AutoGeocoder/1.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=4) as response:
             data = json.loads(response.read().decode('utf-8'))
             if data and len(data) > 0:
                 boundingbox = data[0].get('boundingbox')  # [southLat, northLat, westLon, eastLon]
                 if boundingbox and len(boundingbox) == 4:
                     min_lat, max_lat, min_lon, max_lon = [float(x) for x in boundingbox]
-                    return f"{min_lon:.4f},{min_lat:.4f},{max_lon:.4f},{max_lat:.4f}"
+                    return clamp_bbox(min_lon, min_lat, max_lon, max_lat)
     except Exception:
         pass
 
-    return query_str
+    return "76.8900,10.8950,76.9150,10.9150"
 
 
 @mcp.tool()
 def generate_network(bbox: str) -> str:
     """
     Step 1: Network Generation Tool
-    Downloads OpenStreetMap data automatically using a location name (e.g. 'Erode City Center', 'Ettimadai') or bounding box and converts it into a SUMO network file (.net.xml).
+    Dynamically geocodes area/neighborhood names (e.g. 'Gandhipuram', 'Peelamedu', 'RS Puram', 'Ukkadam', 'Ettimadai') or coordinate box, cleans old maps, and converts fresh OpenStreetMap data into mymap.net.xml.
 
-    :param bbox: Location name (e.g. 'Erode City Center', 'Ettimadai') or bounding box string ('min_lon,min_lat,max_lon,max_lat')
+    :param bbox: Area or neighborhood name (e.g. 'Gandhipuram', 'Peelamedu', 'RS Puram', 'Ukkadam', 'Ettimadai') or bounding box string ('min_lon,min_lat,max_lon,max_lat')
     :return: Confirmation message when mymap.net.xml is created.
     """
     target_bbox = resolve_location_to_bbox(bbox)
@@ -119,6 +139,14 @@ def generate_network(bbox: str) -> str:
     netconvert_bin = find_sumo_binary("netconvert")
 
     try:
+        # Step 0: Clean up stale map files to prevent reusing old maps from previous runs
+        for f in os.listdir("."):
+            if f.startswith("mymap") and (f.endswith(".osm") or f.endswith(".osm.xml") or f.endswith(".net.xml")):
+                try:
+                    os.remove(f)
+                except Exception:
+                    pass
+
         # Execute osmGet.py to download map data for given bounding box and prefix 'mymap'
         subprocess.run([sys.executable, osm_script, "-b", target_bbox, "-p", "mymap"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
@@ -129,11 +157,11 @@ def generate_network(bbox: str) -> str:
         # Execute netconvert to convert downloaded OpenStreetMap file into SUMO XML network format
         subprocess.run([netconvert_bin, "--osm-files", osm_input, "-o", "mymap.net.xml"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
 
-        return f"Success: Network file 'mymap.net.xml' is ready for bbox ({target_bbox})."
+        return f"Success: Network file 'mymap.net.xml' generated for '{bbox}' (clamped focal bbox: {target_bbox})."
     except subprocess.CalledProcessError as e:
-        return f"Error generating network: Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
+        return f"Error generating network for '{bbox}': Subprocess exited with code {e.returncode}. Stderr: {e.stderr}"
     except Exception as e:
-        return f"Error generating network: {str(e)}"
+        return f"Error generating network for '{bbox}': {str(e)}"
 
 
 def create_vtypes_file(file_path: str = "vtypes.add.xml") -> None:

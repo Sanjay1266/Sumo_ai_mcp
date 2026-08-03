@@ -16,4 +16,18 @@ export class SumoResources {
     }
     return fs.readFileSync(statsPath, 'utf-8');
   }
+
+  @Resource({
+    uri: 'sumo://tripinfo',
+    name: 'SUMO Microscopic Trip Info Report',
+    description: 'Raw XML microscopic trip details report generated from the latest SUMO simulation run.',
+    mimeType: 'application/xml'
+  })
+  async getTripInfo(ctx: ExecutionContext) {
+    const tripinfoPath = path.join(process.cwd(), 'tripinfo.xml');
+    if (!fs.existsSync(tripinfoPath)) {
+      return '<error>tripinfo.xml file not found. Run simulation first.</error>';
+    }
+    return fs.readFileSync(tripinfoPath, 'utf-8');
+  }
 }

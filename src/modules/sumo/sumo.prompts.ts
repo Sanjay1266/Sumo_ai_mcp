@@ -14,7 +14,7 @@ export class SumoPrompts {
       messages: [
         {
           role: 'user',
-          content: `Execute the SUMO simulation pipeline using bounding box '${args.bbox}' and ${args.trips || '200'} trips. Follow these steps sequentially:\n1. generate_network\n2. generate_routes\n3. run_headless_simulation\n4. run_gui_simulation\n5. analyze_results`
+          content: `Execute the SUMO simulation pipeline using bounding box '${args.bbox}' and ${args.trips || '200'} trips. Follow these steps sequentially:\n1. generate_network\n2. generate_routes\n3. run_headless_simulation\n4. run_gui_simulation\n5. analyze_results\n6. analyze_trip_details`
         }
       ]
     };

@@ -32,7 +32,7 @@ actual_loaded = int(vehicles_elem.attrib.get("loaded")) if vehicles_elem is not 
 actual_inserted = int(vehicles_elem.attrib.get("inserted")) if vehicles_elem is not None else 0
 actual_route_length = float(trip_stats_elem.attrib.get("routeLength")) if trip_stats_elem is not None else 0.0
 
-print("\n=== 3. Truthfulness Audit ===")
+print("\n=== 3. Truthfulness Audit (stats.xml) ===")
 print(f"Actual stats.xml loaded: {actual_loaded} | Tool reported: {res['analytics']['total_vehicles_loaded']}")
 print(f"Actual stats.xml inserted: {actual_inserted} | Tool reported: {res['analytics']['total_vehicles_inserted']}")
 print(f"Actual stats.xml avg route length: {actual_route_length:.2f}m | Tool reported: {res['analytics']['average_route_length']:.2f}m")
@@ -41,4 +41,16 @@ assert actual_loaded == res["analytics"]["total_vehicles_loaded"], "Mismatch in 
 assert actual_inserted == res["analytics"]["total_vehicles_inserted"], "Mismatch in inserted vehicles count!"
 assert abs(actual_route_length - res["analytics"]["average_route_length"]) < 0.01, "Mismatch in route length!"
 
+print("\n=== 4. Microscopic Trip Analytics Audit (tripinfo.xml) ===")
+assert os.path.exists("tripinfo.xml"), "tripinfo.xml missing!"
+trip_details = sumo_server.analyze_trip_details()
+print("Trip Details Analytics Output:", trip_details)
+
+tree_info = ET.parse("tripinfo.xml")
+root_info = tree_info.getroot()
+raw_trips = root_info.findall(".//tripinfo")
+print(f"Actual tripinfo.xml count: {len(raw_trips)} | Tool reported: {trip_details['total_trips_completed']}")
+assert len(raw_trips) == trip_details["total_trips_completed"], "Mismatch in completed trips count!"
+
 print("\n>>> VERIFICATION AUDIT PASSED 100%! ALL METRICS ARE EMPIRICALLY ACCURATE AND TRUE <<<")
+

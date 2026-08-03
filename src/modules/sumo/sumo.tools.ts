@@ -438,8 +438,117 @@ export class SumoTools {
   }
 
   @Tool({
+    name: 'analyze_trip_details',
+    description: 'Step 5: Microscopic Trip & Delay Analytics Tool - Parses tripinfo.xml to extract trip travel duration, queue waiting times, speed in km/h, congestion index, and vehicle type breakdown.',
+    inputSchema: z.object({})
+  })
+  async analyzeTripDetails(input: {}, ctx: ExecutionContext) {
+    ctx.logger.info('Parsing tripinfo.xml microscopic trip details...');
+
+    const tripinfoPath = path.join(process.cwd(), 'tripinfo.xml');
+    if (!fs.existsSync(tripinfoPath)) {
+      return {
+        error: "Trip info file 'tripinfo.xml' not found. Please run 'run_headless_simulation' first."
+      };
+    }
+
+    try {
+      const xmlData = fs.readFileSync(tripinfoPath, 'utf-8');
+      const tripMatches = xmlData.match(/<tripinfo\b[^>]*\/?>/g) || [];
+
+      if (tripMatches.length === 0) {
+        return {
+          total_trips_completed: 0,
+          average_duration_s: 0.0,
+          average_waiting_time_s: 0.0,
+          average_time_loss_s: 0.0,
+          average_speed_kmh: 0.0,
+          congestion_index: 0.0,
+          by_vehicle_type: {}
+        };
+      }
+
+      let totalDuration = 0;
+      let totalWaitingTime = 0;
+      let totalTimeLoss = 0;
+      let totalRouteLength = 0;
+
+      const vtypeMap: Record<string, { count: number; totalDuration: number; totalWaitingTime: number; totalTimeLoss: number; totalRouteLength: number }> = {};
+
+      for (const tripXml of tripMatches) {
+        const vtypeMatch = tripXml.match(/\bvType="([^"]+)"/);
+        const durationMatch = tripXml.match(/\bduration="([0-9.]+)"/);
+        const routeLenMatch = tripXml.match(/\brouteLength="([0-9.]+)"/);
+        const waitingMatch = tripXml.match(/\bwaitingTime="([0-9.]+)"/);
+        const timeLossMatch = tripXml.match(/\btimeLoss="([0-9.]+)"/);
+
+        const vtype = vtypeMatch ? vtypeMatch[1] : 'unknown';
+        const duration = durationMatch ? parseFloat(durationMatch[1]) : 0.0;
+        const routeLen = routeLenMatch ? parseFloat(routeLenMatch[1]) : 0.0;
+        const waitingTime = waitingMatch ? parseFloat(waitingMatch[1]) : 0.0;
+        const timeLoss = timeLossMatch ? parseFloat(timeLossMatch[1]) : 0.0;
+
+        totalDuration += duration;
+        totalWaitingTime += waitingTime;
+        totalTimeLoss += timeLoss;
+        totalRouteLength += routeLen;
+
+        if (!vtypeMap[vtype]) {
+          vtypeMap[vtype] = { count: 0, totalDuration: 0, totalWaitingTime: 0, totalTimeLoss: 0, totalRouteLength: 0 };
+        }
+        vtypeMap[vtype].count += 1;
+        vtypeMap[vtype].totalDuration += duration;
+        vtypeMap[vtype].totalWaitingTime += waitingTime;
+        vtypeMap[vtype].totalTimeLoss += timeLoss;
+        vtypeMap[vtype].totalRouteLength += routeLen;
+      }
+
+      const n = tripMatches.length;
+      const avgDuration = totalDuration / n;
+      const avgWaitingTime = totalWaitingTime / n;
+      const avgTimeLoss = totalTimeLoss / n;
+      const avgRouteLen = totalRouteLength / n;
+      const avgSpeedMps = avgDuration > 0 ? avgRouteLen / avgDuration : 0.0;
+      const avgSpeedKmh = avgSpeedMps * 3.6;
+      const congestionIndex = avgDuration > 0 ? avgTimeLoss / avgDuration : 0.0;
+
+      const byVehicleType: Record<string, any> = {};
+      for (const [vt, data] of Object.entries(vtypeMap)) {
+        const cnt = data.count;
+        const dur = data.totalDuration / cnt;
+        const wait = data.totalWaitingTime / cnt;
+        const tloss = data.totalTimeLoss / cnt;
+        const rlen = data.totalRouteLength / cnt;
+        const spdMps = dur > 0 ? rlen / dur : 0.0;
+
+        byVehicleType[vt] = {
+          count: cnt,
+          avg_duration_s: Number(dur.toFixed(2)),
+          avg_waiting_time_s: Number(wait.toFixed(2)),
+          avg_time_loss_s: Number(tloss.toFixed(2)),
+          avg_speed_kmh: Number((spdMps * 3.6).toFixed(2))
+        };
+      }
+
+      return {
+        total_trips_completed: n,
+        average_duration_s: Number(avgDuration.toFixed(2)),
+        average_waiting_time_s: Number(avgWaitingTime.toFixed(2)),
+        average_time_loss_s: Number(avgTimeLoss.toFixed(2)),
+        average_speed_kmh: Number(avgSpeedKmh.toFixed(2)),
+        congestion_index: Number(congestionIndex.toFixed(4)),
+        by_vehicle_type: byVehicleType
+      };
+    } catch (e: any) {
+      return {
+        error: `Failed to parse trip info: ${e.message}`
+      };
+    }
+  }
+
+  @Tool({
     name: 'run_full_simulation',
-    description: 'Master Orchestration Tool: Executes the complete end-to-end SUMO traffic simulation pipeline in a single call (downloads network, generates routes, opens GUI, and analyzes results).',
+    description: 'Master Orchestration Tool: Executes the complete end-to-end SUMO traffic simulation pipeline in a single call (downloads network, generates routes, opens GUI, analyzes stats, and parses microscopic trip details).',
     inputSchema: z.object({
       bbox: z.string().describe('Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)'),
       trips: z.number().optional().default(600).describe('Total number of vehicle trips to simulate (default: 600)'),
@@ -473,6 +582,7 @@ export class SumoTools {
     }
 
     const analytics = await this.analyzeResults({}, ctx);
+    const tripDetails = await this.analyzeTripDetails({}, ctx);
 
     return {
       status: 'success',
@@ -485,7 +595,8 @@ export class SumoTools {
       routes_status: routesRes.message,
       headless_status: headlessRes.message,
       gui_status: guiRes ? guiRes.message : 'GUI not requested',
-      analytics
+      analytics,
+      trip_details: tripDetails
     };
   }
 }

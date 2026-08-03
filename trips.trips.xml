@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2026-07-26 06:48:41.918949 by Eclipse SUMO randomTrips.py v1_27_1+0000-7717f2379d9
+<!-- generated on 2026-08-03 10:28:31.581592 by Eclipse SUMO randomTrips.py v1_27_1+0000-7717f2379d9
 <configuration>
     <net-file value="mymap.net.xml"/>
     <additional-files value="vtypes.add.xml"/>

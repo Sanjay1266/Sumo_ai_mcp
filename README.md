@@ -79,6 +79,7 @@ Sumo_simulation/
 | `run_headless_simulation` | *None* | Runs CLI SUMO simulation and outputs `stats.xml` & `tripinfo.xml`. |
 | `run_gui_simulation` | `autoStart: bool, delay: int` | Launches desktop `sumo-gui` visual app with centered camera viewport. |
 | `analyze_results` | *None* | Parses `stats.xml` and returns key metrics (loaded, inserted, avg route length). |
+| `analyze_trip_details` | *None* | Parses `tripinfo.xml` for microscopic travel time, delay loss, speed (km/h), congestion index, and vehicle-type breakdown. |
 | `run_full_simulation` | `bbox: string, trips: int, duration: int, launchGui: bool` | Master end-to-end simulation orchestration tool. |
 
 ### Dedicated Testing Tools

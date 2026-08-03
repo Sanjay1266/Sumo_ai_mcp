@@ -419,6 +419,114 @@ def analyze_results() -> dict:
 
 
 @mcp.tool()
+def analyze_trip_details() -> dict:
+    """
+    Step 5: Microscopic Trip & Delay Analytics Tool
+    Parses tripinfo.xml using xml.etree.ElementTree and extracts microscopic trip metrics
+    such as average trip duration, queue waiting time, time loss, speed in km/h, congestion index,
+    and vehicle-type breakdown statistics.
+
+    :return: Structured dictionary containing detailed microscopic trip and delay analytics.
+    """
+    tripinfo_file = "tripinfo.xml"
+    if not os.path.exists(tripinfo_file):
+        return {
+            "error": f"Trip info file '{tripinfo_file}' not found. Please run 'run_headless_simulation' first."
+        }
+
+    try:
+        tree = ET.parse(tripinfo_file)
+        root = tree.getroot()
+
+        trips = root.findall(".//tripinfo")
+        if not trips:
+            return {
+                "total_trips_completed": 0,
+                "average_duration_s": 0.0,
+                "average_waiting_time_s": 0.0,
+                "average_time_loss_s": 0.0,
+                "average_speed_kmh": 0.0,
+                "congestion_index": 0.0,
+                "by_vehicle_type": {}
+            }
+
+        total_duration = 0.0
+        total_waiting_time = 0.0
+        total_time_loss = 0.0
+        total_route_length = 0.0
+
+        # Group metrics by vehicle type (motorcycles, autos, cars, buses, trucks)
+        vtype_stats = {}
+
+        for t in trips:
+            vtype = t.attrib.get("vType", "unknown")
+            duration = float(t.attrib.get("duration", 0.0))
+            route_len = float(t.attrib.get("routeLength", 0.0))
+            waiting_time = float(t.attrib.get("waitingTime", 0.0))
+            time_loss = float(t.attrib.get("timeLoss", 0.0))
+
+            total_duration += duration
+            total_waiting_time += waiting_time
+            total_time_loss += time_loss
+            total_route_length += route_len
+
+            if vtype not in vtype_stats:
+                vtype_stats[vtype] = {
+                    "count": 0,
+                    "total_duration_s": 0.0,
+                    "total_waiting_time_s": 0.0,
+                    "total_time_loss_s": 0.0,
+                    "total_route_length_m": 0.0
+                }
+
+            vtype_stats[vtype]["count"] += 1
+            vtype_stats[vtype]["total_duration_s"] += duration
+            vtype_stats[vtype]["total_waiting_time_s"] += waiting_time
+            vtype_stats[vtype]["total_time_loss_s"] += time_loss
+            vtype_stats[vtype]["total_route_length_m"] += route_len
+
+        n = len(trips)
+        avg_duration = total_duration / n
+        avg_waiting_time = total_waiting_time / n
+        avg_time_loss = total_time_loss / n
+        avg_route_len = total_route_length / n
+        avg_speed_mps = (avg_route_len / avg_duration) if avg_duration > 0 else 0.0
+        avg_speed_kmh = avg_speed_mps * 3.6
+        congestion_index = (avg_time_loss / avg_duration) if avg_duration > 0 else 0.0
+
+        # Compute per-vtype performance summary
+        by_vtype_summary = {}
+        for vt, data in vtype_stats.items():
+            cnt = data["count"]
+            dur = data["total_duration_s"] / cnt
+            wait = data["total_waiting_time_s"] / cnt
+            tloss = data["total_time_loss_s"] / cnt
+            rlen = data["total_route_length_m"] / cnt
+            spd_mps = (rlen / dur) if dur > 0 else 0.0
+            by_vtype_summary[vt] = {
+                "count": cnt,
+                "avg_duration_s": round(dur, 2),
+                "avg_waiting_time_s": round(wait, 2),
+                "avg_time_loss_s": round(tloss, 2),
+                "avg_speed_kmh": round(spd_mps * 3.6, 2)
+            }
+
+        return {
+            "total_trips_completed": n,
+            "average_duration_s": round(avg_duration, 2),
+            "average_waiting_time_s": round(avg_waiting_time, 2),
+            "average_time_loss_s": round(avg_time_loss, 2),
+            "average_speed_kmh": round(avg_speed_kmh, 2),
+            "congestion_index": round(congestion_index, 4),
+            "by_vehicle_type": by_vtype_summary
+        }
+    except Exception as e:
+        return {
+            "error": f"Failed to parse trip info: {str(e)}"
+        }
+
+
+@mcp.tool()
 def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, density: str = None, launch_gui: bool = True) -> dict:
     """
     Master Orchestration Tool
@@ -428,16 +536,16 @@ def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, densi
     3. Auto-configures centered visual GUI settings (gui-settings.xml)
     4. Executes headless simulation & produces statistics XML
     5. Automatically opens SUMO GUI desktop app for live visual playback
-    6. Parses and returns final traffic analytics metrics
+    6. Parses and returns overall traffic analytics and microscopic trip details
 
     :param bbox: Bounding box coordinate string (min_lon,min_lat,max_lon,max_lat)
     :param trips: Total number of vehicle trips to generate (default: 600)
     :param duration: Total simulation duration in seconds (default: 7200s / 2 hours)
     :param density: Optional preset density level ('low': 250, 'medium': 600, 'high': 1200, 'congested': 2000)
     :param launch_gui: Automatically open the visual SUMO GUI app on desktop (default: True)
-    :return: Combined result dictionary containing status messages and final analytics.
+    :return: Combined result dictionary containing status messages, final analytics, and microscopic trip details.
     """
-    # Step 1: Generate network
+    # Step 1: Generate network from OSM data
     net_res = generate_network(bbox)
     if net_res.startswith("Error"):
         return {"status": "error", "step": "generate_network", "message": net_res}
@@ -447,16 +555,19 @@ def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, densi
     if routes_res.startswith("Error"):
         return {"status": "error", "step": "generate_routes", "message": routes_res}
 
-    # Step 3: Run headless simulation for stats XML
+    # Step 3: Run headless simulation for stats XML and tripinfo XML
     headless_res = run_headless_simulation()
 
-    # Step 4: Launch GUI if requested
+    # Step 4: Launch GUI visual simulation if requested
     gui_res = None
     if launch_gui:
         gui_res = run_gui_simulation(auto_start=True, delay=150)
 
-    # Step 5: Analyze results
+    # Step 5: Parse overall network statistics
     analytics = analyze_results()
+
+    # Step 6: Parse microscopic trip delay and performance metrics
+    trip_details = analyze_trip_details()
 
     return {
         "status": "success",
@@ -469,7 +580,8 @@ def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, densi
         "routes_status": routes_res,
         "headless_status": headless_res,
         "gui_status": gui_res,
-        "analytics": analytics
+        "analytics": analytics,
+        "trip_details": trip_details
     }
 
 

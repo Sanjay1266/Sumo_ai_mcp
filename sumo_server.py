@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+import argparse
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -11,9 +12,26 @@ except ImportError:
     pass
 
 from mcp.server.fastmcp import FastMCP
+from security_utils import (
+    sanitize_location_query,
+    validate_and_clamp_bbox,
+    clamp_simulation_parameters,
+    logger
+)
+
+# Server Host & Port configuration from environment
+SERVER_HOST = os.environ.get("HOST", "127.0.0.1")
+SERVER_PORT = int(os.environ.get("PORT", "8000"))
 
 # Initialize FastMCP server instance for SUMO Simulation Pipeline
-mcp = FastMCP("SUMO Traffic Simulation Server")
+mcp = FastMCP(
+    "SUMO Traffic Simulation Server",
+    host=SERVER_HOST,
+    port=SERVER_PORT,
+    sse_path="/sse",
+    message_path="/messages/"
+)
+
 
 
 def get_python_executable() -> str:
@@ -105,14 +123,14 @@ def resolve_location_to_bbox(location_or_bbox: str) -> str:
     if not location_or_bbox:
         return "76.8900,10.8950,76.9150,10.9150"
 
-    query_str = location_or_bbox.strip()
+    # Sanitize input query to prevent command/path injection
+    query_str = sanitize_location_query(location_or_bbox)
 
     # Check if already a 4-comma numerical string
     parts = query_str.split(',')
     if len(parts) == 4:
         try:
-            floats = [float(p) for p in parts]
-            return clamp_bbox(floats[0], floats[1], floats[2], floats[3])
+            return validate_and_clamp_bbox(query_str)
         except ValueError:
             pass
 
@@ -253,10 +271,9 @@ def generate_routes(trips: int = 600, duration: int = 7200, density: str = None)
     """
     trips_script = find_sumo_script("randomTrips.py")
     
-    total_trips = trips
-    if density:
-        density_map = {"low": 250, "medium": 600, "high": 1200, "congested": 2000}
-        total_trips = density_map.get(density.lower(), trips)
+    # Apply security parameter clamping (1-5000 trips, 10s-86400s duration)
+    total_trips, safe_duration, safe_density = clamp_simulation_parameters(trips, duration, density)
+    duration = safe_duration
 
     period = max(1, duration // max(1, total_trips))
 
@@ -586,4 +603,31 @@ def run_full_simulation(bbox: str, trips: int = 600, duration: int = 7200, densi
 
 
 if __name__ == "__main__":
-    mcp.run()
+    parser = argparse.ArgumentParser(description="SUMO Traffic Simulation MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "sse", "streamable-http"],
+        default=os.environ.get("MCP_TRANSPORT_TYPE", "stdio"),
+        help="Transport type: 'stdio' for desktop AI clients (Claude, Cursor, Antigravity) or 'sse' for web AI models"
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("HOST", "127.0.0.1"),
+        help="Host address to bind for SSE transport (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT", "8000")),
+        help="Port to listen on for SSE transport (default: 8000)"
+    )
+    args = parser.parse_args()
+
+    logger.info(f"Starting SUMO MCP Server (transport='{args.transport}', host='{args.host}', port={args.port})")
+    if args.transport == "sse":
+        mcp.run(transport="sse")
+    elif args.transport == "streamable-http":
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run(transport="stdio")
+

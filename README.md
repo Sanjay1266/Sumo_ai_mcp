@@ -183,6 +183,15 @@ cp .env.example .env
 ```
 
 ### 2. Running Servers
+
+#### 🌟 Option A: Unified Server (Recommended - All-in-One Command)
+Runs FastMCP SSE, OAuth 2.1 Redirect Gateway, and the Multi-AI Simulation Studio simultaneously with automatic system diagnostics:
+```bash
+python main.py
+# (or: npm run start:unified)
+```
+
+#### Option B: Standalone Servers
 ```bash
 # Start Auth Gateway & Multi-AI Studio on http://localhost:8000
 python auth_server.py
@@ -190,8 +199,12 @@ python auth_server.py
 
 # Start SUMO FastMCP Server in SSE mode (for web AI models)
 python sumo_server.py --transport sse --port 8000
-# (or in STDIO mode for Claude/Cursor: python sumo_server.py --transport stdio)
+
+# Start SUMO FastMCP Server in STDIO mode (for Claude Desktop, Cursor, Antigravity)
+python sumo_server.py --transport stdio
+# (or: npm run start:stdio)
 ```
+
 
 ### 3. Running Comprehensive Test Suite
 ```bash

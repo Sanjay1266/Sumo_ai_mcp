@@ -132,6 +132,40 @@ async def health_check():
     }
 
 
+@app.get("/.well-known/mcp")
+@app.get("/mcp/info")
+async def mcp_discovery():
+    """MCP Protocol Auto-Discovery Endpoint for AI Clients & Agents."""
+    return {
+        "name": "SUMO Traffic Simulation Server",
+        "version": "1.0.0",
+        "description": "Intelligent microscopic urban traffic simulation platform connected via MCP to Claude, ChatGPT, Gemini, Cursor, and Ollama",
+        "transports": {
+            "sse": "/sse",
+            "messages": "/messages",
+            "stdio": "python sumo_server.py --transport stdio"
+        },
+        "auth": {
+            "type": "oauth2",
+            "authorization_endpoint": "/auth/authorize",
+            "token_endpoint": "/auth/token",
+            "signup_portal": "/auth/portal",
+            "scopes": ["sumo:simulation"]
+        },
+        "studio": "/ai-hub",
+        "tools": [
+            "generate_network",
+            "generate_routes",
+            "run_headless_simulation",
+            "run_gui_simulation",
+            "analyze_results",
+            "analyze_trip_details",
+            "run_full_simulation"
+        ]
+    }
+
+
+
 @app.get("/auth/models")
 async def list_models():
     """Lists all supported AI models and their connection specifications."""

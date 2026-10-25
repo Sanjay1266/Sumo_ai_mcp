@@ -160,6 +160,14 @@ def test_4_web_studio_endpoints():
     assert "ollama" in model_ids
     print(f"Supported models verified: {model_ids}")
 
+    # Verify MCP Auto-Discovery endpoint
+    res_disco = client.get("/.well-known/mcp")
+    assert res_disco.status_code == 200
+    disco_manifest = res_disco.json()
+    assert "tools" in disco_manifest
+    assert "run_full_simulation" in disco_manifest["tools"]
+    print("MCP Protocol Auto-Discovery (/.well-known/mcp): PASSED")
+
     # Verify /ai-hub HTML Studio
     res_hub = client.get("/ai-hub")
     assert res_hub.status_code == 200
@@ -171,6 +179,7 @@ def test_4_web_studio_endpoints():
     assert res_portal.status_code == 200
     assert "SUMO AI MCP" in res_portal.text
     print("Web Hub Studio & Models Registry: PASSED")
+
 
 
 def test_5_simulation_pipeline_validation():

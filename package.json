@@ -12,7 +12,10 @@
     "upgrade": "nitrostack-cli upgrade",
     "install:all": "nitrostack-cli install",
     "widget": "npm --prefix src/widgets",
-    "launch:local": "node scripts/launch_local_gui.js"
+    "launch:local": "node scripts/launch_local_gui.js",
+    "start:auth": "python auth_server.py",
+    "start:mcp": "python sumo_server.py --transport sse",
+    "test:ai": "python test_ai_integration.py"
   },
   "dependencies": {
     "dotenv": "^16.3.1",

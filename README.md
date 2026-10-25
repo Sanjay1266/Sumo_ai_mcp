@@ -100,6 +100,72 @@ Sumo_simulation/
 
 ---
 
+## 🤖 Universal Multi-AI Model Integration & Direct Redirect Flow
+
+The **SUMO AI MCP Server** can be directly connected to **any AI model of your choice**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User
+    participant AI as AI Model (Claude / ChatGPT / Gemini / Cursor)
+    participant Auth as Auth & Redirect Gateway (:8000)
+    participant SUMO as SUMO FastMCP Simulation Server
+
+    AI->>Auth: 1. Request connection (/auth/authorize)
+    Auth-->>AI: 2. Redirect unauthenticated user to /auth/portal
+    User->>Auth: 3. User Signs Up or Logs In
+    Auth-->>AI: 4. Direct redirect back to AI redirect_uri with OAuth Code & State
+    AI->>Auth: 5. Exchange code for JWT Bearer Token (/auth/token)
+    AI->>SUMO: 6. Execute microscopic simulation tools & stream telemetry
+    SUMO-->>AI: 7. Real-time stats, speed, delay & vehicle breakdown
+    AI-->>User: 8. Urban traffic engineering audit & Level of Service (LOS)
+```
+
+### 1. Ready-to-Use Integration Manifests
+Pre-configured connection manifests are included for instant 1-click setup:
+
+| AI Model / Environment | Configuration File | Supported Transports | Connection Protocol |
+| :--- | :--- | :--- | :--- |
+| **Anthropic Claude 3.5 Sonnet / Desktop** | [`claude_desktop_config.json`](claude_desktop_config.json) | STDIO / SSE | Native FastMCP |
+| **OpenAI ChatGPT / Custom GPTs** | [`chatgpt_openapi_spec.json`](chatgpt_openapi_spec.json) | SSE / HTTP | OpenAPI 3.1 with OAuth2 Redirect |
+| **Google Gemini 1.5 / Antigravity IDE** | [`gemini_mcp_config.json`](gemini_mcp_config.json) | STDIO / SSE | Multi-modal Reasoning & FastMCP |
+| **Cursor AI IDE** | [`.cursor/mcp.json`](.cursor/mcp.json) | STDIO | In-Editor Agent Protocol |
+| **VS Code Copilot / Cline** | [`vscode_mcp_config.json`](vscode_mcp_config.json) | STDIO | Model Context Protocol |
+| **Ollama Local LLM (Llama 3 / DeepSeek)** | Built-in via `/ai-hub` | HTTP | 100% Offline & Private |
+
+---
+
+## 🔐 OAuth 2.1 Direct AI Redirect & Signup Portal
+
+When connecting an AI client or web agent:
+1. **Interactive Redirect Portal**: Navigate to `http://localhost:8000/auth/portal` (or initiate from your AI client).
+2. **User Registration & Signup**: Complete sign up with email and password. Credentials are securely hashed with **PBKDF2-HMAC-SHA256** (100,000 rounds) and salted.
+3. **Automatic AI Redirection**: The gateway issues an authorization code and **immediately redirects back to your connected AI model's callback URL** with the authorization token and state!
+4. **JWT Security**: Access tokens use signed **HMAC-SHA256 (HS256)** with expiration and scope validation.
+
+---
+
+## 🎨 Interactive Multi-AI Simulation Studio (`/ai-hub`)
+
+Launch the web studio at **`http://localhost:8000/ai-hub`**:
+- **Model Selector**: Switch seamlessly between Google Gemini, Anthropic Claude, OpenAI GPT-4o, Ollama Local, and the Built-in SUMO Agent.
+- **Corridor Geocoding**: 1-click presets for *Chennai Central*, *Gandhipuram*, *Ettimadai*, *Coimbatore*, *Bangalore*, *Delhi*, or custom coordinate bounding boxes.
+- **Microscopic Telemetry**: Real-time Level of Service (LOS A through F) gauge, insertion rates, average delay, speed, and Indian mixed vehicle breakdown.
+- **Live AI Reasoning**: The connected AI model explains bottleneck causes and recommends signal timing adjustments and sublane layout improvements.
+
+---
+
+## 🛡️ Security Architecture & Constraints
+
+Detailed specifications are maintained in [**`SECURITY.md`**](SECURITY.md):
+- **Command Injection Prevention**: All queries and place names are sanitized via `security_utils.sanitize_location_query()`; metacharacters (`;`, `&`, `|`, `$`, etc.) are stripped.
+- **Overpass API Protection**: Maximum bounding box span is clamped to `0.05°` (~2.5km) to prevent API rate-limiting and timeouts.
+- **Simulation Parameter Clamping**: Vehicle trips (1–5,000) and duration (10s–86,400s) are bounded to avoid CPU starvation.
+- **Subprocess Isolation**: External binaries are called as argument lists (`subprocess.run([...], shell=False)`).
+
+---
+
 ## 🚀 Setup & Verification
 
 ### 1. Installation & Environment Setup
@@ -108,33 +174,33 @@ git clone https://github.com/Sanjay1266/Sumo_ai_mcp.git
 cd Sumo_ai_mcp
 
 npm install
-pip install sumolib traci fastmcp
+pip install -r requirements.txt # or: pip install fastmcp fastapi uvicorn pydantic
 ```
 
-Create a `.env` file:
-```env
-SUMO_HOME=C:\Program Files (x86)\Eclipse\Sumo
-PATH=%SUMO_HOME%\bin;%PATH%
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
 ```
 
 ### 2. Running Servers
 ```bash
-# Run Core Python FastMCP Server
-python sumo_server.py
+# Start Auth Gateway & Multi-AI Studio on http://localhost:8000
+python auth_server.py
+# (or: npm run start:auth)
 
-# Run Dedicated Test Server
-python sumo_test_server.py
-
-# Run NitroStack TypeScript Server
-npm run dev
+# Start SUMO FastMCP Server in SSE mode (for web AI models)
+python sumo_server.py --transport sse --port 8000
+# (or in STDIO mode for Claude/Cursor: python sumo_server.py --transport stdio)
 ```
 
-### 3. Empirical Verification Audit
+### 3. Running Comprehensive Test Suite
 ```bash
-python test_audit.py
+# Execute comprehensive 5-module validation test (Security, OAuth, AI Router, Studio, SUMO Tools)
+python test_ai_integration.py
+# (or: npm run test:ai)
 ```
 
 ---
 
 ## 📜 License
-Distributed under the MIT License.
+Distributed under the MIT License.

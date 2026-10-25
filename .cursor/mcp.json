@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "sumo-simulation": {
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/sumo_server.py",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "SUMO_HOME": "C:\\Program Files (x86)\\Eclipse\\Sumo",
+        "PYTHON_PATH": "python",
+        "HEADLESS_MODE": "false"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "sumo-traffic-simulation-server",
+  "description": "Google Gemini & Antigravity IDE connection configuration for SUMO AI MCP",
+  "server": {
+    "type": "stdio",
+    "command": "python",
+    "args": [
+      "sumo_server.py",
+      "--transport",
+      "stdio"
+    ],
+    "env": {
+      "SUMO_HOME": "C:\\Program Files (x86)\\Eclipse\\Sumo",
+      "PYTHON_PATH": "python"
+    }
+  },
+  "remote_sse": {
+    "endpoint": "http://localhost:8000/sse",
+    "auth": {
+      "type": "oauth2",
+      "authorization_url": "http://localhost:8000/auth/authorize",
+      "token_url": "http://localhost:8000/auth/token"
+    }
+  }
+}

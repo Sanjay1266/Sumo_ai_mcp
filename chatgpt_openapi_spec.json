@@ -1,0 +1,117 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SUMO AI MCP – Traffic Simulation Engine",
+    "description": "Orchestrates microscopic traffic simulations in Eclipse SUMO with OpenStreetMap geocoding and analytics for OpenAI ChatGPT and Custom GPTs.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local SUMO AI MCP Gateway"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "description": "OAuth 2.0 Authorization Code flow with Redirect Signup",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "http://localhost:8000/auth/authorize",
+            "tokenUrl": "http://localhost:8000/auth/token",
+            "scopes": {
+              "sumo:simulation": "Access to trigger and analyze SUMO traffic simulations"
+            }
+          }
+        }
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "oauth2": ["sumo:simulation"]
+    },
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/models": {
+      "get": {
+        "summary": "List supported AI models and capabilities",
+        "operationId": "listSupportedModels",
+        "responses": {
+          "200": {
+            "description": "List of supported AI models"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get authenticated user profile",
+        "operationId": "getProfile",
+        "responses": {
+          "200": {
+            "description": "Profile information"
+          }
+        }
+      }
+    },
+    "/api/simulation/run": {
+      "post": {
+        "summary": "Run end-to-end traffic simulation for location/bbox",
+        "operationId": "runFullSimulation",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bbox": {
+                    "type": "string",
+                    "description": "Area, city, or neighborhood name (e.g. 'Chennai', 'Gandhipuram', 'Coimbatore') or coordinate string ('min_lon,min_lat,max_lon,max_lat')"
+                  },
+                  "trips": {
+                    "type": "integer",
+                    "default": 600,
+                    "description": "Total vehicle trips to generate (1-5000)"
+                  },
+                  "duration": {
+                    "type": "integer",
+                    "default": 7200,
+                    "description": "Simulation duration in seconds"
+                  },
+                  "density": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "congested"],
+                    "default": "medium",
+                    "description": "Traffic density preset"
+                  },
+                  "launch_gui": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to launch the visual desktop SUMO GUI window"
+                  }
+                },
+                "required": ["bbox"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Simulation execution results, overall network stats, and trip delay analytics"
+          }
+        }
+      }
+    }
+  }
+}

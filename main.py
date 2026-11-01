@@ -23,6 +23,7 @@ except ImportError:
 import security_utils
 import sumo_server
 from auth_server import app as fastapi_app
+import web_app
 
 # =============================================================================
 # ENVIRONMENT & CAPABILITY AUTO-DISCOVERY
@@ -68,14 +69,19 @@ def print_banner(host: str, port: int, mode: str, disco: Dict[str, Any]):
     ai_configured = [k.capitalize() for k, v in disco['ai_keys'].items() if v]
     print(f"  [+] Ready AI Models  : {', '.join(ai_configured)}")
     print("-" * 70)
-    if mode in ["all", "auth"]:
-        print("Unified Service Endpoints:")
-        print(f"  [*] Multi-AI Simulation Studio : http://{host}:{port}/ai-hub")
-        print(f"  [*] OAuth 2.1 Redirect Portal  : http://{host}:{port}/auth/portal")
+    if mode in ["web", "all"]:
+        print("Web Application Endpoints:")
+        print(f"  [*] Web Application Interface : http://{host}:{port}/")
+        print(f"  [*] Multi-AI Simulation Studio: http://{host}:{port}/")
+        print(f"  [*] Interactive Telemetry & GIS: http://{host}:{port}/#analytics")
+        print(f"  [*] API Documentation (Swagger): http://{host}:{port}/docs")
+        print(f"  [*] OAuth 2.1 Redirect Portal : http://{host}:{port}/auth/portal")
         print(f"  [*] FastMCP SSE Stream Endpoint: http://{host}:{port}/sse")
-        print(f"  [*] MCP Discovery Manifest     : http://{host}:{port}/.well-known/mcp")
+        print(f"  [*] MCP Discovery Manifest    : http://{host}:{port}/.well-known/mcp")
+    elif mode == "auth":
+        print("Auth Gateway Endpoints:")
+        print(f"  [*] OAuth 2.1 Redirect Portal  : http://{host}:{port}/auth/portal")
         print(f"  [*] Supported AI Models API    : http://{host}:{port}/auth/models")
-        print(f"  [*] OpenAPI Schema Spec        : http://{host}:{port}/openapi.json")
     elif mode == "stdio":
         print("FastMCP Running in STDIO Mode:")
         print("  [*] Connected to stdin/stdout for Claude Desktop, Cursor, and Antigravity IDE.")
@@ -88,12 +94,12 @@ def print_banner(host: str, port: int, mode: str, disco: Dict[str, Any]):
 # =============================================================================
 
 def start_unified_server():
-    parser = argparse.ArgumentParser(description="SUMO AI MCP Unified Server Launcher")
+    parser = argparse.ArgumentParser(description="SUMO AI Web Application & MCP Unified Server Launcher")
     parser.add_argument(
         "--mode",
-        choices=["all", "stdio", "sse", "auth"],
-        default="all",
-        help="Execution mode: 'all' (unified FastMCP + Auth + Studio), 'stdio' (Claude/Cursor), 'sse' (FastMCP SSE only), 'auth' (Web Studio only)"
+        choices=["web", "all", "stdio", "sse", "auth"],
+        default="web",
+        help="Execution mode: 'web' (Full Web Application, default), 'all' (unified Web App + MCP), 'stdio' (Claude/Cursor), 'sse' (FastMCP SSE only), 'auth' (Auth Portal only)"
     )
     parser.add_argument(
         "--host",
@@ -106,6 +112,11 @@ def start_unified_server():
         default=int(os.environ.get("PORT", "8000")),
         help="Port to listen on (default: 8000)"
     )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Automatically open Web Application in browser upon launch"
+    )
     args = parser.parse_args()
 
     disco = run_auto_discovery()
@@ -116,15 +127,19 @@ def start_unified_server():
     elif args.mode == "sse":
         sumo_server.mcp.run(transport="sse")
     else:
-        # Unified mode: Mount FastMCP SSE directly inside the FastAPI app
-        # This provides /sse and /messages on the same port as /ai-hub and /auth/*
-        try:
-            fastapi_app.mount("", sumo_server.mcp.sse_app())
-        except Exception as e:
-            security_utils.logger.warning(f"FastMCP mount notice: {e}")
+        # Web / Unified mode: Run web_app.app
+        if args.open_browser:
+            def _open():
+                import time
+                import webbrowser
+                time.sleep(1.2)
+                webbrowser.open(f"http://{args.host}:{args.port}/")
+            import threading
+            threading.Thread(target=_open, daemon=True).start()
 
         import uvicorn
-        uvicorn.run(fastapi_app, host=args.host, port=args.port)
+        target_app = web_app.app if args.mode in ["web", "all"] else fastapi_app
+        uvicorn.run(target_app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

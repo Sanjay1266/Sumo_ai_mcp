@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUMO AI Web Application – Urban Traffic Simulation Platform</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+    <!-- Main Header -->
+    <header class="app-header">
+        <div class="brand-section">
+            <div class="brand-icon-box">🚦</div>
+            <div class="brand-titles">
+                <h1>SUMO AI Web Studio</h1>
+                <p>Microscopic Traffic Simulation &amp; Multi-AI Engineering Platform</p>
+            </div>
+        </div>
+
+        <div class="header-badges">
+            <div class="status-indicator">
+                <span class="pulse-dot"></span>
+                <span id="systemStatusBadge">High-Fidelity Simulation Engine</span>
+            </div>
+            <a href="/docs" target="_blank" class="nav-action-btn">
+                <span>📚</span> API Docs
+            </a>
+            <a href="/auth/portal" target="_blank" class="nav-action-btn">
+                <span>🔐</span> Auth Portal
+            </a>
+            <button class="nav-action-btn" onclick="openModal('apiKeyModal')">
+                <span>🔑</span> API Keys
+            </button>
+        </div>
+    </header>
+
+    <!-- Top Navigation Tabs Bar -->
+    <nav class="app-tabs-bar">
+        <button class="tab-btn active" data-tab="studio" onclick="switchTab('studio')">
+            <span>🎮</span> Simulation Studio
+        </button>
+        <button class="tab-btn" data-tab="analytics" onclick="switchTab('analytics')">
+            <span>📊</span> Microscopic Telemetry &amp; Charts
+        </button>
+        <button class="tab-btn" data-tab="copilot" onclick="switchTab('copilot')">
+            <span>🤖</span> Multi-AI Engineering Copilot
+        </button>
+        <button class="tab-btn" data-tab="map" onclick="switchTab('map')">
+            <span>🗺️</span> Fullscreen Corridor Map
+        </button>
+        <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
+            <span>📜</span> Run History
+        </button>
+        <button class="tab-btn" data-tab="mcp" onclick="switchTab('mcp')">
+            <span>🔌</span> MCP &amp; Integrations
+        </button>
+    </nav>
+
+    <!-- Workspace Main Layout -->
+    <main class="main-layout">
+
+        <!-- Left Sidebar: Controls & Configuration -->
+        <aside class="control-sidebar">
+            <div class="section-title">
+                <span>Simulation Parameters</span>
+                <span class="pill">Microscopic Physics</span>
+            </div>
+
+            <!-- Corridor Location & Presets -->
+            <div class="form-group">
+                <label class="form-label">
+                    <span>Corridor / Area</span>
+                    <span style="font-size:0.75rem; color:var(--accent-cyan); cursor:pointer;" onclick="searchAndGeocode()">Resolve 🔍</span>
+                </label>
+                <input type="text" id="simLocation" class="form-input" value="Gandhipuram" placeholder="e.g. Gandhipuram, Chennai Central, Bangalore..." onchange="searchAndGeocode()">
+                
+                <div class="presets-grid" id="presetsContainer">
+                    <!-- Presets chips injected via app.js -->
+                </div>
+            </div>
+
+            <!-- Total Vehicle Trips -->
+            <div class="form-group">
+                <div class="form-label">
+                    <span>Total Vehicle Trips</span>
+                    <span id="tripsValue" style="color:var(--accent-cyan); font-family:monospace; font-weight:700;">600</span>
+                </div>
+                <input type="range" id="tripsSlider" class="range-slider" min="50" max="3000" step="50" value="600" oninput="updateSliderVal('tripsSlider', 'tripsValue')">
+                <div class="slider-labels">
+                    <span>50 Trips</span>
+                    <span>1,500</span>
+                    <span>3,000 Trips</span>
+                </div>
+            </div>
+
+            <!-- Duration -->
+            <div class="form-group">
+                <div class="form-label">
+                    <span>Simulation Duration</span>
+                    <span id="durValue" style="color:var(--accent-amber); font-family:monospace; font-weight:700;">3600s (1.0 hrs)</span>
+                </div>
+                <input type="range" id="durSlider" class="range-slider" min="300" max="14400" step="300" value="3600" oninput="updateDurationVal()">
+                <div class="slider-labels">
+                    <span>5 mins</span>
+                    <span>2 hours</span>
+                    <span>4 hours</span>
+                </div>
+            </div>
+
+            <!-- Traffic Density Level -->
+            <div class="form-group">
+                <label class="form-label">Traffic Density Level</label>
+                <div class="density-group">
+                    <button class="density-btn" onclick="setDensity('low', this)">Low</button>
+                    <button class="density-btn active" onclick="setDensity('normal', this)">Normal</button>
+                    <button class="density-btn" onclick="setDensity('high', this)">High</button>
+                    <button class="density-btn" onclick="setDensity('congested', this)">Jammed</button>
+                </div>
+            </div>
+
+            <!-- Heterogeneous Indian Mixed Traffic Mix -->
+            <div class="vehicle-mix-box">
+                <div class="form-label" style="font-weight:700;">
+                    <span>Indian Mixed Traffic Distribution</span>
+                    <span class="pill" style="font-size:0.68rem;">Sublane Physics</span>
+                </div>
+
+                <div class="mix-bar">
+                    <div id="segMoto" class="mix-bar-seg seg-moto" style="width:35%;"></div>
+                    <div id="segAuto" class="mix-bar-seg seg-auto" style="width:20%;"></div>
+                    <div id="segCar" class="mix-bar-seg seg-car" style="width:30%;"></div>
+                    <div id="segBus" class="mix-bar-seg seg-bus" style="width:8%;"></div>
+                    <div id="segTruck" class="mix-bar-seg seg-truck" style="width:7%;"></div>
+                </div>
+
+                <div class="mix-slider-row">
+                    <div class="mix-label-row">
+                        <span>🏍️ Motorcycles</span>
+                        <span id="mixMotoVal" style="color:#f87171; font-weight:700;">35%</span>
+                    </div>
+                    <input type="range" id="mixMoto" class="range-slider" min="5" max="60" value="35" oninput="updateVehicleMix()">
+                </div>
+
+                <div class="mix-slider-row">
+                    <div class="mix-label-row">
+                        <span>🛺 Auto-rickshaws</span>
+                        <span id="mixAutoVal" style="color:#fbbf24; font-weight:700;">20%</span>
+                    </div>
+                    <input type="range" id="mixAuto" class="range-slider" min="5" max="40" value="20" oninput="updateVehicleMix()">
+                </div>
+
+                <div class="mix-slider-row">
+                    <div class="mix-label-row">
+                        <span>🚗 Passenger Cars</span>
+                        <span id="mixCarVal" style="color:#38bdf8; font-weight:700;">30%</span>
+                    </div>
+                    <input type="range" id="mixCar" class="range-slider" min="5" max="50" value="30" oninput="updateVehicleMix()">
+                </div>
+
+                <div class="mix-slider-row">
+                    <div class="mix-label-row">
+                        <span>🚌 City Buses</span>
+                        <span id="mixBusVal" style="color:#34d399; font-weight:700;">8%</span>
+                    </div>
+                    <input type="range" id="mixBus" class="range-slider" min="2" max="25" value="8" oninput="updateVehicleMix()">
+                </div>
+
+                <div class="mix-slider-row">
+                    <div class="mix-label-row">
+                        <span>🚚 Heavy Trucks</span>
+                        <span id="mixTruckVal" style="color:#c084fc; font-weight:700;">7%</span>
+                    </div>
+                    <input type="range" id="mixTruck" class="range-slider" min="2" max="20" value="7" oninput="updateVehicleMix()">
+                </div>
+            </div>
+
+            <!-- GUI Launch Switch -->
+            <div class="toggle-row">
+                <span class="toggle-label">Launch Desktop SUMO GUI</span>
+                <input type="checkbox" id="launchGuiCheck" style="accent-color:var(--accent-cyan); width:18px; height:18px;">
+            </div>
+
+            <!-- Master Run Simulation Button -->
+            <button id="runSimBtn" class="launch-sim-btn" onclick="runFullSimulation()">
+                <span>🚀 Run Microscopic Simulation</span>
+            </button>
+
+            <!-- Step-by-Step Advanced Controls -->
+            <div class="pipeline-steps">
+                <div class="step-card">
+                    <span>1. OSM Network</span>
+                    <button class="step-btn" onclick="runStepNetwork()">Generate</button>
+                </div>
+                <div class="step-card">
+                    <span>2. Vehicle Routes</span>
+                    <button class="step-btn" onclick="runStepRoutes()">Synthesize</button>
+                </div>
+                <div class="step-card">
+                    <span>3. Headless Physics</span>
+                    <button class="step-btn" onclick="runStepExecute()">Simulate</button>
+                </div>
+                <div class="step-card">
+                    <span>3b. Desktop Viewport</span>
+                    <button class="step-btn" onclick="runStepGui()">Launch GUI</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Main Workspace: Tabbed Views -->
+        <section class="workspace-area">
+
+            <!-- TAB 1: SIMULATION STUDIO -->
+            <div id="tab-studio" class="tab-content active">
+                
+                <!-- KPI Dashboard Cards -->
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Highway Capacity LOS</div>
+                        <div id="kpiLos" class="los-badge los-c">LOS C (Fair Flow)</div>
+                        <div class="kpi-sub">Highway Capacity Manual Standard</div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-label">Insertion Success Rate</div>
+                        <div id="kpiInsertion" class="kpi-value" style="color:var(--accent-green);">100.0%</div>
+                        <div id="kpiLoadedSub" class="kpi-sub">Loaded: 100 | Inserted: 100</div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-label">Average Fleet Speed</div>
+                        <div id="kpiSpeed" class="kpi-value" style="color:var(--accent-cyan);">29.5 km/h</div>
+                        <div class="kpi-sub">Heterogeneous fleet velocity</div>
+                    </div>
+
+                    <div class="kpi-card">
+                        <div class="kpi-label">Average Time Loss</div>
+                        <div id="kpiDelay" class="kpi-value" style="color:var(--accent-amber);">67.4 s</div>
+                        <div id="kpiCongestion" class="kpi-sub">Congestion Index: 0.2759</div>
+                    </div>
+                </div>
+
+                <!-- Interactive Leaflet Map -->
+                <div class="map-panel">
+                    <div class="map-header">
+                        <div class="section-title">
+                            <span>Corridor GIS Map &amp; Bounding Box View</span>
+                            <span class="pill">OpenStreetMap</span>
+                        </div>
+                        <span style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">Focal Span: ~2.5km × 2.5km</span>
+                    </div>
+                    <div id="leafletMap"></div>
+                </div>
+
+                <!-- Real-time Console Terminal Output -->
+                <div class="terminal-card">
+                    <div class="terminal-header">
+                        <div class="terminal-dots">
+                            <span class="t-dot red"></span>
+                            <span class="t-dot yellow"></span>
+                            <span class="t-dot green"></span>
+                        </div>
+                        <div class="terminal-title">Simulation Execution &amp; Telemetry Stream</div>
+                        <div id="execStatus" style="font-size:0.75rem; color:var(--accent-cyan); font-family:monospace;">Status: Ready</div>
+                    </div>
+                    <div id="terminalOutput" class="terminal-body">Welcome to SUMO AI Web Application!
+
+1. Select or search a corridor location (e.g. Gandhipuram, Chennai Central, Silk Board).
+2. Adjust vehicle trips, duration, and heterogeneous Indian traffic mix.
+3. Click 'Run Microscopic Simulation' to execute the full pipeline.
+4. Telemetry and Level of Service (LOS) will appear above, and your AI Copilot will audit the run.</div>
+                </div>
+            </div>
+
+            <!-- TAB 2: MICROSCOPIC TELEMETRY & CHARTS -->
+            <div id="tab-analytics" class="tab-content">
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <div class="section-title">
+                            <span>Vehicle Fleet Distribution</span>
+                            <span class="pill">Indian Mixed Traffic</span>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="vehicleMixChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="section-title">
+                            <span>Average Speed by Vehicle Type</span>
+                            <span class="pill">Velocity (km/h)</span>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="vehicleSpeedChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Microscopic Vehicle Trips Breakdown Table -->
+                <div class="table-panel">
+                    <div class="table-toolbar">
+                        <div class="section-title">
+                            <span>Microscopic Vehicle Performance Breakdown</span>
+                            <span class="pill">tripinfo.xml</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="trips-table">
+                            <thead>
+                                <tr>
+                                    <th>Index</th>
+                                    <th>Vehicle Category</th>
+                                    <th>Trip Count</th>
+                                    <th>Avg Speed</th>
+                                    <th>Time Loss</th>
+                                    <th>Wait Time</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tripsTableBody">
+                                <!-- Populated dynamically by app.js -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Raw XML Files Inspector -->
+                <div class="table-panel">
+                    <div class="section-title">
+                        <span>Raw SUMO XML File Inspector</span>
+                        <span class="pill">Disk Verification</span>
+                    </div>
+                    <div class="file-tab-bar">
+                        <button class="file-tab active" data-file="stats.xml" onclick="loadXmlFile('stats.xml')">stats.xml</button>
+                        <button class="file-tab" data-file="tripinfo.xml" onclick="loadXmlFile('tripinfo.xml')">tripinfo.xml</button>
+                        <button class="file-tab" data-file="mymap.sumocfg" onclick="loadXmlFile('mymap.sumocfg')">mymap.sumocfg</button>
+                        <button class="file-tab" data-file="vtypes.add.xml" onclick="loadXmlFile('vtypes.add.xml')">vtypes.add.xml</button>
+                    </div>
+                    <div id="xmlViewer" class="xml-viewer-box">Loading stats.xml...</div>
+                </div>
+            </div>
+
+            <!-- TAB 3: MULTI-AI ENGINEERING COPILOT -->
+            <div id="tab-copilot" class="tab-content">
+                <div class="copilot-container">
+                    <div class="section-title">
+                        <span>Multi-AI Traffic Engineering Copilot</span>
+                        <span id="activeAiModelName" class="pill">Built-in Traffic Engineering Expert</span>
+                    </div>
+
+                    <!-- AI Model Selector Tabs -->
+                    <div class="ai-model-tabs">
+                        <button class="ai-tab-chip active" onclick="selectAiModel('builtin')">🧠 Built-in Expert</button>
+                        <button class="ai-tab-chip" onclick="selectAiModel('gemini')">🔵 Google Gemini 1.5</button>
+                        <button class="ai-tab-chip" onclick="selectAiModel('claude')">🟣 Anthropic Claude 3.5</button>
+                        <button class="ai-tab-chip" onclick="selectAiModel('gpt4')">🟢 OpenAI GPT-4o</button>
+                        <button class="ai-tab-chip" onclick="selectAiModel('ollama')">🦙 Ollama Local LLM</button>
+                    </div>
+
+                    <!-- Quick Prompt Actions -->
+                    <div class="ai-prompts-bar">
+                        <button class="quick-prompt-btn" onclick="setQuickPrompt('What are the primary bottleneck causes in this corridor and how can we mitigate them?')">⚡ Analyze Bottlenecks</button>
+                        <button class="quick-prompt-btn" onclick="setQuickPrompt('Recommend optimal traffic signal cycle timings and split phases for this intersection.')">🚦 Signal Retiming</button>
+                        <button class="quick-prompt-btn" onclick="setQuickPrompt('Evaluate whether dedicated bus lanes or motorcycle sublanes would improve Level of Service.')">🚌 Bus &amp; Motorcycle Sublanes</button>
+                        <button class="quick-prompt-btn" onclick="setQuickPrompt('Compare the simulation delay against Highway Capacity Manual (HCM) standards.')">📊 HCM Audit</button>
+                    </div>
+
+                    <!-- Chat Message Thread -->
+                    <div id="chatThread" class="chat-thread">
+                        <div class="chat-bubble ai">Hello! I am your SUMO AI Traffic Engineering Assistant. Run a simulation, and I will analyze vehicle speeds, queue delays, and Level of Service (LOS) patterns. You can also ask me specific questions about corridor design, roundabouts, or signal coordination.</div>
+                    </div>
+
+                    <!-- Chat Input Box -->
+                    <div class="chat-input-row">
+                        <input type="text" id="chatInput" class="chat-input" placeholder="Ask your AI Copilot about corridor bottlenecks, signal timing, or lane design..." onkeypress="if(event.key==='Enter') sendAiMessage()">
+                        <button class="chat-send-btn" onclick="sendAiMessage()">Send</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 4: FULLSCREEN CORRIDOR MAP -->
+            <div id="tab-map" class="tab-content">
+                <div class="map-panel">
+                    <div class="map-header">
+                        <div class="section-title">
+                            <span>High-Resolution GIS Viewport</span>
+                            <span class="pill">Leaflet &amp; OpenStreetMap</span>
+                        </div>
+                    </div>
+                    <div id="fullscreenLeafletMap"></div>
+                </div>
+            </div>
+
+            <!-- TAB 5: RUN HISTORY -->
+            <div id="tab-history" class="tab-content">
+                <div class="table-panel">
+                    <div class="section-title">
+                        <span>Simulation Run History &amp; Scenario Comparison</span>
+                        <span class="pill">Recent Executions</span>
+                    </div>
+                    <div id="historyListContainer" class="history-list">
+                        <!-- History cards injected by app.js -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 6: MCP & INTEGRATIONS -->
+            <div id="tab-mcp" class="tab-content">
+                <div class="table-panel">
+                    <div class="section-title">
+                        <span>Model Context Protocol (MCP) &amp; AI Clients Connection</span>
+                        <span class="pill">Claude • Cursor • Gemini • OpenAPI</span>
+                    </div>
+                    <p style="color:var(--text-muted); font-size:0.9rem; margin-top:8px;">
+                        This Web Application also functions as a universal Model Context Protocol (MCP) server. You can connect Claude Desktop, Cursor AI, Antigravity IDE, or custom GPTs directly to the live server.
+                    </p>
+
+                    <div style="margin-top:16px;">
+                        <h4 style="color:var(--accent-cyan); font-size:0.95rem; margin-bottom:8px;">Claude Desktop Configuration (claude_desktop_config.json)</h4>
+                        <div class="xml-viewer-box" style="height:140px;">{
+  "mcpServers": {
+    "sumo-simulation": {
+      "command": "python",
+      "args": ["sumo_server.py", "--transport", "stdio"]
+    }
+  }
+}</div>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <h4 style="color:var(--accent-cyan); font-size:0.95rem; margin-bottom:8px;">Cursor AI Configuration (.cursor/mcp.json)</h4>
+                        <div class="xml-viewer-box" style="height:140px;">{
+  "mcpServers": {
+    "sumo": {
+      "command": "python",
+      "args": ["sumo_server.py"]
+    }
+  }
+}</div>
+                    </div>
+
+                    <div style="margin-top:16px;">
+                        <h4 style="color:var(--accent-cyan); font-size:0.95rem; margin-bottom:8px;">FastMCP SSE Streaming Endpoint</h4>
+                        <div class="xml-viewer-box" style="height:60px;">http://localhost:8000/sse</div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- API Key Settings Modal -->
+    <div id="apiKeyModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="section-title">
+                <span>Configure AI Model API Keys</span>
+                <span style="cursor:pointer;" onclick="closeModal('apiKeyModal')">✖</span>
+            </div>
+            <p style="font-size:0.8rem; color:var(--text-muted);">Keys are saved locally in your browser storage and never logged.</p>
+
+            <div class="form-group">
+                <label class="form-label">Google Gemini API Key</label>
+                <input type="password" id="apiKeyGemini" class="form-input" placeholder="AIzaSy...">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Anthropic Claude API Key</label>
+                <input type="password" id="apiKeyClaude" class="form-input" placeholder="sk-ant-api03-...">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">OpenAI API Key</label>
+                <input type="password" id="apiKeyOpenAi" class="form-input" placeholder="sk-proj-...">
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:10px;">
+                <button class="nav-action-btn" onclick="closeModal('apiKeyModal')">Cancel</button>
+                <button class="chat-send-btn" style="padding:10px 20px;" onclick="saveApiKeys()">Save Keys</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- App Controller Script -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

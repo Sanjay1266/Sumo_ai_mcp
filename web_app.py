@@ -1072,6 +1072,7 @@ async def stream_simulation_events(request: Request):
 # =============================================================================
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {
         "status": "healthy",

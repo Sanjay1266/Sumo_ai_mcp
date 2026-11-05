@@ -7,6 +7,8 @@
   "scripts": {
     "start": "python web_app.py",
     "start:web": "python web_app.py --open-browser",
+    "start:browser": "python main.py --mode web --open-browser",
+    "start:app": "python sumo_server.py --web --open-browser",
     "start:unified": "python main.py --mode all",
     "dev": "python web_app.py --open-browser",
     "test": "python test_web_app.py",

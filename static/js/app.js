@@ -691,11 +691,11 @@ function replayLoop(now) {
     replayTime += dt * replaySpeed * 2.0; // Scaled time progression
     replaySignalTimer += dt * replaySpeed * 2.0;
 
-    // Traffic Signal Phase Cycle: 35s Green, 5s Amber, 20s Red
-    const cycle = replaySignalTimer % 60.0;
-    if (cycle < 35.0) {
+    // Dynamic Tuned Signal Phase Cycle
+    const cycle = replaySignalTimer % (tunedSignalCycle || 60.0);
+    if (cycle < (tunedGreenPhase || 35.0)) {
         replaySignalPhase = 'GREEN';
-    } else if (cycle < 40.0) {
+    } else if (cycle < ((tunedGreenPhase || 35.0) + (tunedAmberPhase || 5.0))) {
         replaySignalPhase = 'AMBER';
     } else {
         replaySignalPhase = 'RED';
@@ -837,6 +837,18 @@ function renderReplayFrame() {
             ctx.fillRect(vx - bw / 2, vy - bh / 2, bw, bh);
             ctx.strokeRect(vx - bw / 2, vy - bh / 2, bw, bh);
 
+            if (selectedVehicleId && v.id === selectedVehicleId) {
+                ctx.save();
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 2.5;
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(vx, vy, Math.max(bw, bh) + 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
             replayActiveVehicles.push({
                 x: vx, y: vy, w: bw, h: bh, data: v
             });
@@ -846,6 +858,11 @@ function renderReplayFrame() {
     document.getElementById('hudVehicles').innerText = activeCount;
 }
 
+let selectedVehicleId = null;
+let tunedSignalCycle = 60.0;
+let tunedGreenPhase = 35.0;
+let tunedAmberPhase = 5.0;
+
 function handleCanvasClick(e) {
     if (!replayCanvas) return;
     const rect = replayCanvas.getBoundingClientRect();
@@ -853,22 +870,83 @@ function handleCanvasClick(e) {
     const clickY = e.clientY - rect.top;
 
     const hit = replayActiveVehicles.find(v => (
-        clickX >= v.x - v.w && clickX <= v.x + v.w &&
-        clickY >= v.y - v.h && clickY <= v.y + v.h
+        clickX >= v.x - (v.w + 6) && clickX <= v.x + (v.w + 6) &&
+        clickY >= v.y - (v.h + 6) && clickY <= v.y + (v.h + 6)
     ));
 
     const tooltip = document.getElementById('vehicleTooltip');
     if (hit) {
+        selectedVehicleId = hit.data.id;
         tooltip.style.left = `${clickX + 15}px`;
         tooltip.style.top = `${clickY}px`;
         tooltip.style.display = 'block';
         tooltip.innerHTML = `
-            <b>Vehicle #${hit.data.id}</b> (${hit.data.vType})<br>
-            Velocity: ${hit.data.speed_kmh} km/h<br>
-            Delay: ${hit.data.timeLoss}s | Wait: ${hit.data.waitingTime}s
+            <div style="font-weight:700; color:#38bdf8; margin-bottom:4px;">🚘 Vehicle #${hit.data.id} (${hit.data.vType})</div>
+            <div>Velocity: <b>${hit.data.speed_kmh} km/h</b></div>
+            <div>Time Loss: <b>${hit.data.timeLoss}s</b> | Idle: <b>${hit.data.waitingTime}s</b></div>
+            <div>Emission Rate: <b>${hit.data.co2_rate_gh || 120} g/h CO2</b></div>
+            <div>Status: <span style="color:${hit.data.efficiency === 'Optimal' ? '#34d399' : '#fbbf24'};">${hit.data.efficiency || 'Active'}</span></div>
         `;
     } else {
+        selectedVehicleId = null;
         tooltip.style.display = 'none';
+    }
+}
+
+async function applySignalTuning() {
+    const cycle = parseInt(document.getElementById('tuneCycle').value) || 60;
+    const split = parseInt(document.getElementById('tuneSplit').value) || 55;
+    const amber = parseInt(document.getElementById('tuneAmber').value) || 5;
+    const ped = document.getElementById('tunePed')?.checked || false;
+
+    try {
+        const res = await fetch('/api/simulation/signals/tune', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cycle_length_s: cycle,
+                green_split_pct: split,
+                amber_s: amber,
+                pedestrian_scramble: ped
+            })
+        });
+
+        const data = await res.json();
+        if (data.status === 'success') {
+            tunedSignalCycle = data.cycle_length_s;
+            tunedGreenPhase = data.green_phase_s;
+            tunedAmberPhase = data.amber_phase_s;
+
+            const badge = document.getElementById('tuneResultBadge');
+            if (badge) {
+                badge.style.display = 'block';
+                badge.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; flex-wrap:wrap; gap:8px;">
+                        <span style="color:#34d399; font-weight:700;">▲ Predicted Velocity Gain: +${data.speed_gain_pct}%</span>
+                        <span style="color:#38bdf8; font-weight:700;">Capacity: ${data.throughput_capacity_vph} veh/hr</span>
+                    </div>
+                    <div style="color:#94a3b8; font-size:0.8rem;">${data.recommendation}</div>
+                `;
+            }
+            showToast('Signal Optimization Applied', `Cycle: ${cycle}s | Green: ${data.green_phase_s}s`, 'success');
+        }
+    } catch (e) {
+        console.error('Signal tuning failed:', e);
+        showToast('Error', 'Failed to tune signals', 'error');
+    }
+}
+
+async function testApiEndpoint(url) {
+    const out = document.getElementById('apiPlaygroundOutput');
+    if (!out) return;
+    out.style.display = 'block';
+    out.innerText = `Fetching ${url}...`;
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        out.innerText = JSON.stringify(data, null, 2);
+    } catch (e) {
+        out.innerText = `Error: ${e.message}`;
     }
 }
 

@@ -846,13 +846,43 @@ if __name__ == "__main__":
         default=int(os.environ.get("PORT", "8000")),
         help="Port to listen on for SSE transport (default: 8000)"
     )
+    parser.add_argument(
+        "--mode",
+        choices=["mcp", "web", "all"],
+        default="mcp",
+        help="Execution mode: 'mcp' (FastMCP server) or 'web' (Web Application)"
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Launch full Web Application interface directly"
+    )
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="Automatically open Web Application in browser upon launch"
+    )
     args = parser.parse_args()
 
-    logger.info(f"Starting SUMO MCP Server (transport='{args.transport}', host='{args.host}', port={args.port})")
-    if args.transport == "sse":
+    if args.web or args.mode in ["web", "all"]:
+        import web_app
+        import uvicorn
+        if args.open_browser:
+            def _open():
+                import time, webbrowser
+                time.sleep(1.2)
+                webbrowser.open(f"http://{args.host}:{args.port}/")
+            import threading
+            threading.Thread(target=_open, daemon=True).start()
+        logger.info(f"Starting SUMO Web Application at http://{args.host}:{args.port}/")
+        uvicorn.run(web_app.app, host=args.host, port=args.port)
+    elif args.transport == "sse":
+        logger.info(f"Starting SUMO MCP Server (transport='sse', host='{args.host}', port={args.port})")
         mcp.run(transport="sse")
     elif args.transport == "streamable-http":
+        logger.info(f"Starting SUMO MCP Server (transport='streamable-http', host='{args.host}', port={args.port})")
         mcp.run(transport="streamable-http")
     else:
+        logger.info("Starting SUMO MCP Server (transport='stdio')")
         mcp.run(transport="stdio")
 

@@ -145,6 +145,13 @@ Sumo_ai_mcp/
 | `GET` | `/api/presets` | Retrieves the curated corridor presets list. |
 | `GET` | `/api/geocode?q={name}` | Geocodes a place name into coordinate bounds and center latitude/longitude. |
 | `POST` | `/api/simulation/full` | Executes the complete end-to-end simulation pipeline. |
+| `GET` | `/api/simulation/replay` | 2D canvas replay vehicle trajectory positions & animations. |
+| `POST` | `/api/simulation/signals/tune` | Adaptive traffic signal cycle length & green split tuning (Webster's formulation). |
+| `POST` | `/api/simulation/compare` | Digital twin scenario comparison (Baseline vs Interventions). |
+| `GET` | `/api/analytics/emissions` | Corridor carbon emissions (kg CO2), fuel wasted (L), and Green score. |
+| `GET` | `/api/export/csv` | Streams downloadable CSV of microscopic trips. |
+| `GET` | `/api/export/json` | Exports complete structured simulation run JSON telemetry. |
+| `GET` | `/api/export/report` | Print-ready HTML/PDF traffic engineering audit certificate. |
 | `POST` | `/api/simulation/step/network` | Step 1: Generates `mymap.net.xml`. |
 | `POST` | `/api/simulation/step/routes` | Step 2: Generates `mymap.rou.xml` and `mymap.sumocfg`. |
 | `POST` | `/api/simulation/step/execute` | Step 3: Executes headless microscopic physics simulation. |

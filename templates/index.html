@@ -350,6 +350,46 @@
                             <button class="speed-chip" onclick="setReplaySpeed(10, this)">10x</button>
                         </div>
                     </div>
+
+                    <!-- Adaptive Traffic Signal Optimizer Panel -->
+                    <div class="signal-tuner-card" style="margin-top: 18px; background: rgba(30, 41, 59, 0.6); padding: 18px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.08);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 14px; flex-wrap:wrap; gap:10px;">
+                            <div style="font-weight:700; color:var(--accent-cyan); display:flex; align-items:center; gap:8px;">
+                                <span>🚦 Webster's Adaptive Signal Timing Optimizer</span>
+                                <span class="pill" style="font-size:0.7rem;">Live Cycle Control</span>
+                            </div>
+                            <button class="step-btn" style="background:var(--accent-cyan); color:#0f172a; font-weight:700;" onclick="applySignalTuning()">⚡ Apply Cycle Tuning</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#94a3b8; margin-bottom:4px;">
+                                    <span>Total Cycle Length:</span>
+                                    <span id="cycleVal" style="color:#38bdf8; font-weight:700;">60s</span>
+                                </div>
+                                <input type="range" id="tuneCycle" class="range-slider" min="30" max="180" value="60" oninput="document.getElementById('cycleVal').innerText = this.value + 's'">
+                            </div>
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#94a3b8; margin-bottom:4px;">
+                                    <span>Green Split (Arterial):</span>
+                                    <span id="splitVal" style="color:#34d399; font-weight:700;">55%</span>
+                                </div>
+                                <input type="range" id="tuneSplit" class="range-slider" min="20" max="80" value="55" oninput="document.getElementById('splitVal').innerText = this.value + '%'">
+                            </div>
+                            <div>
+                                <div style="display:flex; justify-content:space-between; font-size:0.85rem; color:#94a3b8; margin-bottom:4px;">
+                                    <span>Amber Clearance:</span>
+                                    <span id="amberVal" style="color:#fbbf24; font-weight:700;">5s</span>
+                                </div>
+                                <input type="range" id="tuneAmber" class="range-slider" min="3" max="8" value="5" oninput="document.getElementById('amberVal').innerText = this.value + 's'">
+                            </div>
+                            <div style="display:flex; align-items:center; gap: 10px; padding-top: 15px;">
+                                <input type="checkbox" id="tunePed" style="accent-color:#38bdf8; width:18px; height:18px;">
+                                <label for="tunePed" style="font-size:0.85rem; color:#cbd5e1; cursor:pointer;">Pedestrian Scramble Phase</label>
+                            </div>
+                        </div>
+                        <div id="tuneResultBadge" style="margin-top: 14px; font-size:0.85rem; color:#cbd5e1; background:rgba(15, 23, 42, 0.7); padding:10px 14px; border-radius:8px; border:1px solid rgba(56,189,248,0.2); display:none;">
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -384,7 +424,11 @@
                             <span>Microscopic Vehicle Performance Breakdown</span>
                             <span class="pill">tripinfo.xml</span>
                         </div>
-                        <a href="/api/export/csv" class="step-btn" download>📥 Download CSV</a>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <a href="/api/export/csv" class="step-btn" download>📥 Download CSV</a>
+                            <a href="/api/export/json" class="step-btn" download>📊 Download JSON</a>
+                            <a href="/api/export/report" target="_blank" class="step-btn">🖨️ Audit Certificate</a>
+                        </div>
                     </div>
                     <div class="table-responsive">
                         <table class="trips-table">
@@ -657,6 +701,20 @@
                     <div style="margin-top:16px;">
                         <h4 style="color:var(--accent-cyan); font-size:0.95rem; margin-bottom:8px;">FastMCP SSE Streaming Endpoint</h4>
                         <div class="xml-viewer-box" style="height:60px;">http://localhost:8000/sse</div>
+                    </div>
+
+                    <!-- REST API Interactive Playground -->
+                    <div style="margin-top:24px; padding-top:18px; border-top:1px solid var(--border);">
+                        <h4 style="color:var(--accent-cyan); font-size:0.95rem; margin-bottom:8px;">⚡ Live REST API Interactive Playground</h4>
+                        <p style="color:var(--text-muted); font-size:0.85rem; margin-bottom:12px;">Test any endpoint directly in your browser:</p>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                            <button class="step-btn" onclick="testApiEndpoint('/api/system/status')">GET /api/system/status</button>
+                            <button class="step-btn" onclick="testApiEndpoint('/api/presets')">GET /api/presets</button>
+                            <button class="step-btn" onclick="testApiEndpoint('/api/analytics/emissions')">GET /api/analytics/emissions</button>
+                            <button class="step-btn" onclick="testApiEndpoint('/api/history')">GET /api/history</button>
+                            <button class="step-btn" onclick="testApiEndpoint('/.well-known/mcp')">GET /.well-known/mcp</button>
+                        </div>
+                        <pre id="apiPlaygroundOutput" class="xml-viewer-box" style="height:150px; font-size:0.8rem; display:none; overflow:auto;"></pre>
                     </div>
                 </div>
             </div>

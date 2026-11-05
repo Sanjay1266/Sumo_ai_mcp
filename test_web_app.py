@@ -208,8 +208,34 @@ def test_web_application_endpoints():
     assert res_health.json()["status"] == "healthy"
     print("MCP Protocol Backward Compatibility: PASSED")
 
+    # 13. JSON Telemetry Export
+    print("\n--- Test 13: Structured JSON Telemetry Export ---")
+    res_json = client.get("/api/export/json")
+    assert res_json.status_code == 200
+    assert "application/json" in res_json.headers["content-type"]
+    json_data = res_json.json()
+    assert "network_stats" in json_data
+    assert "trip_analytics" in json_data
+    print("JSON Telemetry Export: PASSED")
+
+    # 14. Interactive Adaptive Signal Tuning
+    print("\n--- Test 14: Adaptive Traffic Signal Timing Optimizer ---")
+    res_tune = client.post("/api/simulation/signals/tune", json={
+        "cycle_length_s": 90,
+        "green_split_pct": 60,
+        "amber_s": 5,
+        "pedestrian_scramble": True
+    })
+    assert res_tune.status_code == 200
+    tune_data = res_tune.json()
+    assert tune_data["cycle_length_s"] == 90
+    assert tune_data["green_phase_s"] == 54
+    assert tune_data["throughput_capacity_vph"] > 0
+    print(f"Optimal Delay Gain: +{tune_data['speed_gain_pct']}% | Throughput: {tune_data['throughput_capacity_vph']} veh/hr")
+    print("Adaptive Signal Timing Optimizer: PASSED")
+
     print("\n" + "=" * 68)
-    print(">>> ALL 12 WEB APPLICATION MODULE TESTS PASSED WITH 100% SUCCESS! <<<")
+    print(">>> ALL 14 WEB APPLICATION MODULE TESTS PASSED WITH 100% SUCCESS! <<<")
     print("=" * 68)
 
 

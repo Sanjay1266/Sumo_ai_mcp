@@ -26,3 +26,4 @@ ENV PORT=8000
 
 # Start SUMO AI Web Application
 CMD ["python", "web_app.py", "--host", "0.0.0.0", "--port", "8000"]
+

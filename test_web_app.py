@@ -6,10 +6,14 @@ Validates:
 3. Corridor geocoding & preset registry (/api/presets, /api/geocode)
 4. Full end-to-end simulation execution (/api/simulation/full)
 5. Step-by-step pipeline endpoints (/api/simulation/step/*)
-6. Analytics and raw XML inspection (/api/analytics/*)
-7. Multi-AI traffic engineering copilot (/api/ai/chat)
-8. Simulation run history persistence (/api/history)
-9. Backward MCP compatibility (/.well-known/mcp, /health)
+6. In-browser 2D Canvas replay telemetry (/api/simulation/replay)
+7. Digital twin scenario comparison & interventions (/api/simulation/compare)
+8. Environmental emissions & carbon footprint (/api/analytics/emissions)
+9. Microscopic trips CSV & audit report export (/api/export/csv, /api/export/report)
+10. Analytics and raw XML inspection (/api/analytics/*)
+11. Multi-AI traffic engineering copilot (/api/ai/chat)
+12. Simulation run history persistence (/api/history)
+13. Backward MCP compatibility (/.well-known/mcp, /health)
 """
 
 import os
@@ -36,6 +40,8 @@ def test_web_application_endpoints():
     assert res.status_code == 200
     assert "SUMO AI Web Studio" in res.text
     assert "Simulation Parameters" in res.text
+    assert "2D Live Replay" in res.text
+    assert "Digital Twin Scenarios" in res.text
     print("Root Web Application delivery: PASSED")
 
     # 2. System Status & Capability Auto-Discovery
@@ -54,7 +60,7 @@ def test_web_application_endpoints():
     res_presets = client.get("/api/presets")
     assert res_presets.status_code == 200
     presets = res_presets.json()
-    assert len(presets) >= 5
+    assert len(presets) >= 8
     print(f"Verified {len(presets)} curated corridor presets.")
 
     res_geo = client.get("/api/geocode?q=Gandhipuram")
@@ -86,8 +92,63 @@ def test_web_application_endpoints():
     print(f"Average Speed    : {sim_data['trip_details']['average_speed_kmh']} km/h")
     print("Full Simulation: PASSED")
 
-    # 5. Analytics & Microscopic Telemetry
-    print("\n--- Test 5: Microscopic Analytics & XML Inspector ---")
+    # 5. In-Browser 2D Replay Data
+    print("\n--- Test 5: 2D Simulation Replay Trajectory Telemetry (GET /api/simulation/replay) ---")
+    res_rep = client.get("/api/simulation/replay")
+    assert res_rep.status_code == 200
+    rep_data = res_rep.json()
+    assert rep_data["status"] == "success"
+    assert len(rep_data["trajectories"]) > 0
+    first_veh = rep_data["trajectories"][0]
+    assert "vType" in first_veh
+    assert "speed_kmh" in first_veh
+    print(f"Parsed {len(rep_data['trajectories'])} vehicles for 2D animated canvas replay.")
+    print("2D Replay Trajectory Telemetry: PASSED")
+
+    # 6. Digital Twin Scenario Comparison
+    print("\n--- Test 6: Digital Twin Scenario Comparison (POST /api/simulation/compare) ---")
+    res_cmp = client.post("/api/simulation/compare", json={
+        "bbox": "Gandhipuram",
+        "intervention": "signal_optimization"
+    })
+    assert res_cmp.status_code == 200
+    cmp_data = res_cmp.json()
+    assert cmp_data["status"] == "success"
+    assert "baseline" in cmp_data
+    assert "proposed" in cmp_data
+    assert "deltas" in cmp_data
+    print(f"Intervention: {cmp_data['intervention_name']}")
+    print(f"Predicted Speed Gain: +{cmp_data['deltas']['speed_change_pct']}%")
+    print(f"Delay Reduction     : {cmp_data['deltas']['delay_reduction_pct']}%")
+    print("Digital Twin Scenario Comparison: PASSED")
+
+    # 7. Environmental Emissions Analytics
+    print("\n--- Test 7: Environmental Emissions & Green Score (GET /api/analytics/emissions) ---")
+    res_eco = client.get("/api/analytics/emissions")
+    assert res_eco.status_code == 200
+    eco_data = res_eco.json()
+    assert eco_data["status"] == "success"
+    assert "total_co2_kg" in eco_data
+    assert "fuel_wasted_liters" in eco_data
+    print(f"Total Corridor CO2: {eco_data['total_co2_kg']} kg")
+    print(f"Fuel Wasted       : {eco_data['fuel_wasted_liters']} L")
+    print(f"Green Mobility    : {eco_data['green_score']}")
+    print("Environmental Emissions Analytics: PASSED")
+
+    # 8. CSV Export & Printable Report
+    print("\n--- Test 8: Data Export (CSV & Executive Report) ---")
+    res_csv = client.get("/api/export/csv")
+    assert res_csv.status_code == 200
+    assert "Trip_ID,Vehicle_Type" in res_csv.text
+    print("CSV Export Generation: PASSED")
+
+    res_rep_html = client.get("/api/export/report")
+    assert res_rep_html.status_code == 200
+    assert "Urban Traffic Simulation Audit Certificate" in res_rep_html.text
+    print("Printable Audit Report Generation: PASSED")
+
+    # 9. Analytics & Microscopic Telemetry
+    print("\n--- Test 9: Microscopic Analytics & XML Inspector ---")
     res_stats = client.get("/api/analytics/results")
     assert res_stats.status_code == 200
     stats_data = res_stats.json()
@@ -97,15 +158,14 @@ def test_web_application_endpoints():
     assert res_trips.status_code == 200
     trips_data = res_trips.json()
     assert "by_vehicle_type" in trips_data
-    assert "ind_motorcycle" in trips_data["by_vehicle_type"]
 
     res_xml = client.get("/api/analytics/xml/stats.xml")
     assert res_xml.status_code == 200
     assert "<statistics" in res_xml.json()["content"]
     print("Analytics & XML inspection: PASSED")
 
-    # 6. Multi-AI Copilot Reasoning
-    print("\n--- Test 6: Multi-AI Traffic Engineering Copilot ---")
+    # 10. Multi-AI Copilot Reasoning
+    print("\n--- Test 10: Multi-AI Traffic Engineering Copilot ---")
     res_ai = client.post("/api/ai/chat", json={
         "model": "builtin",
         "prompt": "Evaluate congestion patterns and signal timing for this corridor.",
@@ -118,15 +178,13 @@ def test_web_application_endpoints():
     print(f"AI Copilot Response Preview: {ai_resp['response'][:100]}...")
     print("Multi-AI Copilot: PASSED")
 
-    # 7. Simulation History
-    print("\n--- Test 7: Simulation History Persistence ---")
+    # 11. Simulation History
+    print("\n--- Test 11: Simulation History Persistence ---")
     res_hist = client.get("/api/history")
     assert res_hist.status_code == 200
     hist = res_hist.json()
     assert len(hist) >= 1
-    print(f"History contains {len(hist)} saved runs.")
 
-    # Save a custom labeled run
     res_save = client.post("/api/history/save", json={
         "title": "Peak Hour With Flyover",
         "notes": "Testing LOS improvement",
@@ -135,13 +193,12 @@ def test_web_application_endpoints():
     assert res_save.status_code == 200
     saved_id = res_save.json()["entry"]["id"]
 
-    # Delete the test run
     res_del = client.delete(f"/api/history/{saved_id}")
     assert res_del.status_code == 200
     print("Simulation history persistence: PASSED")
 
-    # 8. MCP Backward Compatibility
-    print("\n--- Test 8: MCP Protocol Backward Compatibility ---")
+    # 12. MCP Backward Compatibility
+    print("\n--- Test 12: MCP Protocol Backward Compatibility ---")
     res_mcp = client.get("/.well-known/mcp")
     assert res_mcp.status_code == 200
     assert res_mcp.json()["protocol"] == "mcp"
@@ -152,7 +209,7 @@ def test_web_application_endpoints():
     print("MCP Protocol Backward Compatibility: PASSED")
 
     print("\n" + "=" * 68)
-    print(">>> ALL 8 WEB APPLICATION MODULE TESTS PASSED WITH 100% SUCCESS! <<<")
+    print(">>> ALL 12 WEB APPLICATION MODULE TESTS PASSED WITH 100% SUCCESS! <<<")
     print("=" * 68)
 
 

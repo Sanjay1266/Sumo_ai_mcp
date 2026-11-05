@@ -30,8 +30,14 @@
         <div class="header-badges">
             <div class="status-indicator">
                 <span class="pulse-dot"></span>
-                <span id="systemStatusBadge">High-Fidelity Simulation Engine</span>
+                <span id="systemStatusBadge">Simulation Engine Ready</span>
             </div>
+            <a href="/api/export/csv" class="nav-action-btn" download title="Export microscopic trips to CSV">
+                <span>📥</span> Export CSV
+            </a>
+            <a href="/api/export/report" target="_blank" class="nav-action-btn" title="Open executive audit certificate & report">
+                <span>📄</span> Audit Report
+            </a>
             <a href="/docs" target="_blank" class="nav-action-btn">
                 <span>📚</span> API Docs
             </a>
@@ -49,14 +55,23 @@
         <button class="tab-btn active" data-tab="studio" onclick="switchTab('studio')">
             <span>🎮</span> Simulation Studio
         </button>
+        <button class="tab-btn" data-tab="replay" onclick="switchTab('replay')">
+            <span>🎥</span> 2D Live Replay
+        </button>
         <button class="tab-btn" data-tab="analytics" onclick="switchTab('analytics')">
-            <span>📊</span> Microscopic Telemetry &amp; Charts
+            <span>📊</span> Microscopic Telemetry
+        </button>
+        <button class="tab-btn" data-tab="compare" onclick="switchTab('compare')">
+            <span>⚖️</span> Digital Twin Scenarios
+        </button>
+        <button class="tab-btn" data-tab="emissions" onclick="switchTab('emissions')">
+            <span>🍃</span> Eco &amp; Emissions
         </button>
         <button class="tab-btn" data-tab="copilot" onclick="switchTab('copilot')">
-            <span>🤖</span> Multi-AI Engineering Copilot
+            <span>🤖</span> AI Copilot
         </button>
         <button class="tab-btn" data-tab="map" onclick="switchTab('map')">
-            <span>🗺️</span> Fullscreen Corridor Map
+            <span>🗺️</span> Corridor Map
         </button>
         <button class="tab-btn" data-tab="history" onclick="switchTab('history')">
             <span>📜</span> Run History
@@ -256,7 +271,11 @@
                             <span>Corridor GIS Map &amp; Bounding Box View</span>
                             <span class="pill">OpenStreetMap</span>
                         </div>
-                        <span style="font-size:0.8rem; color:var(--text-muted); font-family:monospace;">Focal Span: ~2.5km × 2.5km</span>
+                        <div style="display:flex; gap:6px;">
+                            <button class="step-btn" onclick="setMapLayer('dark')">🌙 Dark</button>
+                            <button class="step-btn" onclick="setMapLayer('streets')">🗺️ Streets</button>
+                            <button class="step-btn" onclick="setMapLayer('satellite')">🛰️ Satellite</button>
+                        </div>
                     </div>
                     <div id="leafletMap"></div>
                 </div>
@@ -281,7 +300,60 @@
                 </div>
             </div>
 
-            <!-- TAB 2: MICROSCOPIC TELEMETRY & CHARTS -->
+            <!-- TAB 2: IN-BROWSER 2D SIMULATION REPLAY -->
+            <div id="tab-replay" class="tab-content">
+                <div class="replay-panel">
+                    <div class="section-title">
+                        <span>Interactive 2D Microscopic Vehicle Replay Engine</span>
+                        <span class="pill">60 FPS HTML5 Canvas</span>
+                    </div>
+
+                    <div class="replay-canvas-container">
+                        <div class="replay-hud">
+                            <div class="replay-hud-badge">
+                                <span class="dot" style="background:#38bdf8;"></span>
+                                <span>Time: <b id="hudTime">0.0s</b></span>
+                            </div>
+                            <div class="replay-hud-badge">
+                                <span class="dot" style="background:#34d399;"></span>
+                                <span>Active Vehicles: <b id="hudVehicles">0</b></span>
+                            </div>
+                            <div class="replay-hud-badge">
+                                <span class="dot" id="hudSignalDot" style="background:#22c55e;"></span>
+                                <span>Signal: <b id="hudSignalPhase">GREEN</b></span>
+                            </div>
+                        </div>
+
+                        <canvas id="replayCanvas"></canvas>
+                        <div id="vehicleTooltip" class="vehicle-tooltip"></div>
+                    </div>
+
+                    <!-- Playback Controls -->
+                    <div class="replay-toolbar">
+                        <div class="replay-btn-group">
+                            <button id="replayPlayBtn" class="replay-btn primary" onclick="toggleReplayPlay()">
+                                <span>▶️ Play Replay</span>
+                            </button>
+                            <button class="replay-btn" onclick="stepReplayForward()">
+                                <span>⏭️ Step</span>
+                            </button>
+                            <button class="replay-btn" onclick="resetReplay()">
+                                <span>🔄 Reset</span>
+                            </button>
+                        </div>
+
+                        <div class="replay-speed-selector">
+                            <span style="font-size:0.8rem; color:var(--text-muted); margin-right:4px;">Speed:</span>
+                            <button class="speed-chip active" onclick="setReplaySpeed(1, this)">1x</button>
+                            <button class="speed-chip" onclick="setReplaySpeed(2, this)">2x</button>
+                            <button class="speed-chip" onclick="setReplaySpeed(5, this)">5x</button>
+                            <button class="speed-chip" onclick="setReplaySpeed(10, this)">10x</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: MICROSCOPIC TELEMETRY & CHARTS -->
             <div id="tab-analytics" class="tab-content">
                 <div class="charts-grid">
                     <div class="chart-card">
@@ -312,6 +384,7 @@
                             <span>Microscopic Vehicle Performance Breakdown</span>
                             <span class="pill">tripinfo.xml</span>
                         </div>
+                        <a href="/api/export/csv" class="step-btn" download>📥 Download CSV</a>
                     </div>
                     <div class="table-responsive">
                         <table class="trips-table">
@@ -349,7 +422,140 @@
                 </div>
             </div>
 
-            <!-- TAB 3: MULTI-AI ENGINEERING COPILOT -->
+            <!-- TAB 4: DIGITAL TWIN SCENARIOS -->
+            <div id="tab-compare" class="tab-content">
+                <div class="comparison-panel">
+                    <div class="section-title">
+                        <span>Digital Twin: Traffic Engineering Intervention Modeling</span>
+                        <span class="pill">Before vs. After Delta</span>
+                    </div>
+
+                    <!-- Intervention Selector -->
+                    <div class="intervention-selector-bar">
+                        <button class="intervention-tab active" onclick="selectIntervention('signal_optimization', this)">
+                            <span>🚦</span> Adaptive AI Green Wave
+                        </button>
+                        <button class="intervention-tab" onclick="selectIntervention('brt_corridor', this)">
+                            <span>🚌</span> Dedicated BRT Lane
+                        </button>
+                        <button class="intervention-tab" onclick="selectIntervention('motorcycle_sublane', this)">
+                            <span>🏍️</span> Motorcycle Sublane Segregation
+                        </button>
+                        <button class="intervention-tab" onclick="selectIntervention('flyover', this)">
+                            <span>🌉</span> Grade-Separated Flyover
+                        </button>
+                        <button class="intervention-tab" onclick="selectIntervention('congestion_pricing', this)">
+                            <span>💳</span> Peak Congestion Pricing
+                        </button>
+                    </div>
+
+                    <!-- Comparison Cards -->
+                    <div class="comparison-grid">
+                        <div class="scenario-card">
+                            <div class="section-title">
+                                <span>Current Baseline Corridor</span>
+                                <span id="cmpBaseLos" class="los-badge los-d">LOS D</span>
+                            </div>
+                            <div class="kpi-grid" style="grid-template-columns:1fr 1fr;">
+                                <div class="history-kpi-item">
+                                    <span id="cmpBaseSpeed" class="history-kpi-val">28.5</span>
+                                    <span class="history-kpi-lbl">Speed (km/h)</span>
+                                </div>
+                                <div class="history-kpi-item">
+                                    <span id="cmpBaseDelay" class="history-kpi-val">68.0s</span>
+                                    <span class="history-kpi-lbl">Avg Delay</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="scenario-card proposed">
+                            <div class="section-title">
+                                <span id="cmpProposedTitle" style="color:var(--accent-green);">Proposed Intervention</span>
+                                <span id="cmpProposedLos" class="los-badge los-b">LOS B</span>
+                            </div>
+                            <div class="kpi-grid" style="grid-template-columns:1fr 1fr;">
+                                <div class="history-kpi-item">
+                                    <span id="cmpProposedSpeed" class="history-kpi-val" style="color:var(--accent-green);">35.3</span>
+                                    <span class="history-kpi-lbl">Speed (km/h)</span>
+                                </div>
+                                <div class="history-kpi-item">
+                                    <span id="cmpProposedDelay" class="history-kpi-val" style="color:var(--accent-green);">42.2s</span>
+                                    <span class="history-kpi-lbl">Avg Delay</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deltas Summary Bar -->
+                    <div class="table-panel" style="background:var(--bg-inner);">
+                        <div class="section-title">
+                            <span>Predicted Engineering Benefits</span>
+                            <span id="cmpCostTier" class="pill">Low (Software / Sensors)</span>
+                        </div>
+                        <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:8px;">
+                            <span id="cmpDeltaSpeed" class="delta-badge delta-positive">▲ +24% Velocity</span>
+                            <span id="cmpDeltaDelay" class="delta-badge delta-positive">▼ -38% Time Loss</span>
+                            <span id="cmpDeltaFuel" class="delta-badge delta-positive">🌱 -24.5% Fuel Loss</span>
+                            <span id="cmpDeltaCo2" class="delta-badge delta-positive">🍃 -182.4 kg CO2</span>
+                        </div>
+                        <p id="cmpRationale" style="font-size:0.86rem; color:var(--text-muted); margin-top:12px; line-height:1.5;">
+                            Optimizes cycle length from 120s fixed to 90s dynamic adaptive phases, clearing queue spillbacks.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: ECO & EMISSIONS ANALYTICS -->
+            <div id="tab-emissions" class="tab-content">
+                <div class="emissions-panel">
+                    <div class="section-title">
+                        <span>Environmental Carbon Footprint &amp; Eco Analytics</span>
+                        <span class="pill">Green Urban Mobility</span>
+                    </div>
+
+                    <div class="emissions-kpis">
+                        <div class="eco-card">
+                            <div class="kpi-label">Total Simulated CO2</div>
+                            <div id="ecoCo2Val" class="kpi-value" style="color:var(--accent-amber);">148.2 kg</div>
+                            <div class="kpi-sub">Calculated via vehicle distance &amp; idling</div>
+                        </div>
+
+                        <div class="eco-card">
+                            <div class="kpi-label">Fuel Wasted In Delay</div>
+                            <div id="ecoFuelVal" class="kpi-value" style="color:var(--accent-red);">28.4 L</div>
+                            <div class="kpi-sub">Idling fuel burned in congestion queues</div>
+                        </div>
+
+                        <div class="eco-card">
+                            <div class="eco-gauge">
+                                <div>
+                                    <div class="kpi-label">Eco Mobility Rating</div>
+                                    <div class="kpi-sub" style="margin-top:4px;">Based on fleet delay efficiency</div>
+                                </div>
+                                <div id="ecoScoreBadge" class="eco-score-badge">B+</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- EV Transition Projection Slider -->
+                    <div class="table-panel" style="background:var(--bg-inner);">
+                        <div class="section-title">
+                            <span>Electric Vehicle (EV) Transition Simulator</span>
+                            <span id="evPercentVal" class="pill" style="color:var(--accent-cyan);">25% EV Adoption</span>
+                        </div>
+                        <p style="font-size:0.82rem; color:var(--text-muted); margin-top:4px;">
+                            Simulate the corridor carbon emissions reduction as the vehicle fleet adopts electric mobility.
+                        </p>
+                        <input type="range" id="evSlider" class="range-slider" min="0" max="100" step="5" value="25" style="margin-top:14px;" oninput="updateEvProjection()">
+                        <div style="display:flex; justify-content:space-between; margin-top:12px;">
+                            <span style="font-size:0.82rem; color:var(--text-muted);">Projected Total CO2: <b id="evCo2Projected" style="color:var(--accent-green);">111.1 kg</b></span>
+                            <span style="font-size:0.82rem; color:var(--text-muted);">Carbon Abatement: <b id="evCo2Saved" style="color:var(--accent-cyan);">-37.1 kg (-25%)</b></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 6: MULTI-AI ENGINEERING COPILOT -->
             <div id="tab-copilot" class="tab-content">
                 <div class="copilot-container">
                     <div class="section-title">
@@ -387,7 +593,7 @@
                 </div>
             </div>
 
-            <!-- TAB 4: FULLSCREEN CORRIDOR MAP -->
+            <!-- TAB 7: FULLSCREEN CORRIDOR MAP -->
             <div id="tab-map" class="tab-content">
                 <div class="map-panel">
                     <div class="map-header">
@@ -400,7 +606,7 @@
                 </div>
             </div>
 
-            <!-- TAB 5: RUN HISTORY -->
+            <!-- TAB 8: RUN HISTORY -->
             <div id="tab-history" class="tab-content">
                 <div class="table-panel">
                     <div class="section-title">
@@ -413,7 +619,7 @@
                 </div>
             </div>
 
-            <!-- TAB 6: MCP & INTEGRATIONS -->
+            <!-- TAB 9: MCP & INTEGRATIONS -->
             <div id="tab-mcp" class="tab-content">
                 <div class="table-panel">
                     <div class="section-title">
@@ -457,6 +663,9 @@
 
         </section>
     </main>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
 
     <!-- API Key Settings Modal -->
     <div id="apiKeyModal" class="modal-overlay">
